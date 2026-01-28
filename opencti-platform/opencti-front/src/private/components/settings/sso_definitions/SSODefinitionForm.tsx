@@ -23,6 +23,7 @@ import IconButton from '@common/button/IconButton';
 import { Add, Delete } from '@mui/icons-material';
 import SelectField from 'src/components/fields/SelectField';
 import MenuItem from '@mui/material/MenuItem';
+import CertConfig from '@components/settings/sso_definitions/CertConfig';
 
 interface SSODefinitionFormProps {
   onCancel: () => void;
@@ -214,6 +215,7 @@ const SSODefinitionForm = ({
     groupSearchBase: '',
     groupSearchFilter: '',
     allow_self_signed: false,
+    // CERT
   };
 
   const getSourceAndTargetFromMapping = (groupMapping: string[]) => {
@@ -345,8 +347,8 @@ const SSODefinitionForm = ({
               onChange={(event, value) => handleChangeTab(value)}
             >
               <Tab label={t_i18n('SSO Configuration')} />
-              <Tab label={t_i18n('Groups configuration')} />
-              <Tab label={t_i18n('Organizations configuration')} />
+              <Tab label={t_i18n('Groups configuration')} disabled={selectedStrategy === 'ClientCert'} />
+              <Tab label={t_i18n('Organizations configuration')} disabled={selectedStrategy === 'ClientCert'} />
             </Tabs>
           </Box>
           {currentTab === 0 && (
@@ -393,6 +395,7 @@ const SSODefinitionForm = ({
               {selectedStrategy === 'SAML' && <SAMLConfig updateField={updateField} />}
               {selectedStrategy === 'OpenID' && <OpenIDConfig updateField={updateField} />}
               {selectedStrategy === 'LDAP' && <LDAPConfig updateField={updateField} />}
+              {selectedStrategy === 'ClientCert' && <CertConfig updateField={updateField} />}
               <FieldArray name="advancedConfigurations">
                 {({ push, remove, form }) => (
                   <>
