@@ -3,9 +3,10 @@ import * as R from 'ramda';
 import { uniq } from 'ramda';
 import { v4 as uuid } from 'uuid';
 import { DateTime } from 'luxon';
-import {
+import conf, {
   ACCOUNT_STATUS_ACTIVE,
   ACCOUNT_STATUS_EXPIRED,
+  ACCOUNT_STATUS_LOCKED,
   ACCOUNT_STATUSES,
   BUS_TOPICS,
   DEFAULT_ACCOUNT_STATUS,
@@ -30,7 +31,15 @@ import {
 } from '../database/middleware-loader';
 import { delEditContext, notify, setEditContext } from '../database/redis';
 import { findUserSessions, killSessions, killUserSessions } from '../database/session';
-import { buildPagination, isEmptyField, isNotEmptyField, READ_INDEX_INTERNAL_OBJECTS, READ_INDEX_STIX_DOMAIN_OBJECTS, READ_RELATIONSHIPS_INDICES } from '../database/utils';
+import {
+  buildPagination,
+  isEmptyField,
+  isNotEmptyField,
+  READ_INDEX_INTERNAL_OBJECTS,
+  READ_INDEX_STIX_DOMAIN_OBJECTS,
+  READ_RELATIONSHIPS_INDICES,
+  UPDATE_OPERATION_ADD,
+} from '../database/utils';
 import { extractEntityRepresentativeName } from '../database/entity-representative';
 import { publishUserAction } from '../listener/UserActionListener';
 import { authorizedMembers } from '../schema/attribute-definition';
@@ -91,12 +100,13 @@ import { sanitizeUser } from '../utils/templateContextSanitizer';
 import { safeRender } from '../utils/safeEjs.client';
 import { totp } from '../utils/totp';
 import { hashSHA256 } from '../utils/hash';
+import { apiTokens } from '../modules/attributes/internalObject-registrationAttributes';
 
 const BEARER = 'Bearer ';
 const BASIC = 'Basic ';
 export const TAXIIAPI = 'TAXIIAPI';
 const PLATFORM_ORGANIZATION = 'settings_platform_organization';
-const PROTECTED_USER_ATTRIBUTES = ['api_token', 'external'];
+const PROTECTED_USER_ATTRIBUTES = [apiTokens.name, 'external'];
 const PROTECTED_EXTERNAL_ATTRIBUTES = ['user_email', 'user_name'];
 const ME_USER_MODIFIABLE_ATTRIBUTES = [
   'user_email',
@@ -724,7 +734,6 @@ export const addUser = async (context, user, newUser) => {
   }
   let userToCreate = R.pipe(
     R.assoc('user_email', userEmail),
-    R.assoc('api_token', newUser.api_token ? newUser.api_token : uuid()),
     R.assoc('password', bcrypt.hashSync(userPassword)),
     R.assoc('theme', newUser.theme ? newUser.theme : 'default'),
     R.assoc('language', newUser.language ? newUser.language : 'auto'),
@@ -1828,35 +1837,49 @@ export const authenticateUserFromRequest = async (context, req) => {
 };
 
 export const initAdmin = async (context, email, password, tokenValue) => {
-  const existingAdmin = await findById(context, SYSTEM_USER, OPENCTI_ADMIN_UUID);
+  const isExternallyManaged = conf.get('app:admin:externally_managed') === true;
+  let existingAdmin = await findById(context, SYSTEM_USER, OPENCTI_ADMIN_UUID);
   if (existingAdmin) {
     // If admin user exists, just patch the fields
     const patch = {
-      account_status: ACCOUNT_STATUS_ACTIVE,
       user_email: email,
       password: bcrypt.hashSync(password.toString()),
-      api_token: tokenValue,
+      account_status: isExternallyManaged ? ACCOUNT_STATUS_LOCKED : ACCOUNT_STATUS_ACTIVE,
       external: true,
     };
     await patchAttribute(context, SYSTEM_USER, existingAdmin.id, ENTITY_TYPE_USER, patch);
   } else {
+    // Create user
     const userToCreate = {
       internal_id: OPENCTI_ADMIN_UUID,
       external: true,
       user_email: email.toLowerCase(),
-      account_status: ACCOUNT_STATUS_ACTIVE,
+      account_status: isExternallyManaged ? ACCOUNT_STATUS_LOCKED : ACCOUNT_STATUS_ACTIVE,
       name: 'admin',
       firstname: 'Admin',
       lastname: 'OpenCTI',
       description: 'Principal admin account',
-      api_token: tokenValue,
       password: password.toString(),
       user_confidence_level: {
         max_confidence: 100,
         overrides: [],
       },
     };
-    await addUser(context, SYSTEM_USER, userToCreate);
+    existingAdmin = await addUser(context, SYSTEM_USER, userToCreate);
+  }
+  // Create base token if needed
+  const tokenId = 'base_token_' + OPENCTI_ADMIN_UUID;
+  if (!(existingAdmin.api_tokens ?? []).map((t) => t.id).includes(tokenId)) {
+    const now = DateTime.now().toUTC().toString();
+    const newToken = {
+      id: tokenId,
+      name: 'Base token',
+      hash: hashSHA256(tokenValue),
+      created_at: now,
+      masked_token: `****${tokenValue.slice(-4)}`,
+    };
+    const updates = [{ key: apiTokens.name, value: [newToken], operation: UPDATE_OPERATION_ADD }];
+    await updateAttribute(context, SYSTEM_USER, OPENCTI_ADMIN_UUID, ENTITY_TYPE_USER, updates);
   }
 };
 

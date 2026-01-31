@@ -1,4 +1,3 @@
-import { v4 as uuid } from 'uuid';
 import { logApp } from '../config/conf';
 import { fullEntitiesOrRelationsList, patchAttribute } from '../database/middleware';
 import { ENTITY_TYPE_USER } from '../schema/internalObject';
@@ -24,8 +23,8 @@ export const up = async (next) => {
       const alreadyExists = currentTokens.some((t) => t.hash === legacyTokenHash);
       if (!alreadyExists) {
         const newToken = {
-          id: uuid(),
-          name: 'Legacy Token', // Identify origin
+          id: 'base_token_' + user.internal_id,
+          name: 'Legacy Token',
           hash: legacyTokenHash,
           created_at: new Date().toISOString(),
           masked_token: `****${user.api_token.slice(-4)}`,

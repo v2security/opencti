@@ -16,6 +16,9 @@ import { publishUserAction } from '../../listener/UserActionListener';
 import { notify } from '../../database/redis';
 import { BUS_TOPICS } from '../../config/conf';
 import { internalLoadById } from '../../database/middleware-loader';
+import { generateSecureToken } from '../../utils/security';
+import { UPDATE_OPERATION_ADD, UPDATE_OPERATION_REMOVE } from '../../database/utils';
+import { apiTokens } from '../attributes/internalObject-registrationAttributes';
 
 // -- Existing Logic --
 export const userAlreadyExists = async (context: AuthContext, name: string) => {
@@ -36,11 +39,8 @@ export const userAlreadyExists = async (context: AuthContext, name: string) => {
   return users.edges.length > 0;
 };
 
-export const createOnTheFlyUser = async (
-  context: AuthContext,
-  user: AuthUser,
-  input: { userName: string; serviceAccount: boolean; confidenceLevel: number | null | undefined },
-) => {
+type OnTheFlyInput = { userName: string; serviceAccount: boolean; confidenceLevel: number | null | undefined };
+export const createOnTheFlyUser = async (context: AuthContext, user: AuthUser, input: OnTheFlyInput) => {
   const defaultIngestionGroups: BasicGroupEntity[] = await findDefaultIngestionGroups(context, user) as BasicGroupEntity[];
   if (defaultIngestionGroups.length < 1) {
     throw FunctionalError('You have not defined a default group for ingestion users', {});
@@ -71,15 +71,10 @@ export const createOnTheFlyUser = async (
     }
     userInput = { ...userInput, user_confidence_level: { max_confidence: userConfidence, overrides: [] } };
   }
-  const newlyCreatedUser = await addUser(context, user, userInput);
-  return newlyCreatedUser;
+  return await addUser(context, user, userInput);
 };
 
 // -- API Token Logic --
-
-import { generateSecureToken } from '../../utils/security';
-import { UPDATE_OPERATION_ADD, UPDATE_OPERATION_REMOVE } from '../../database/utils';
-
 export const addUserToken = async (context: AuthContext, user: AuthUser, input: UserTokenAddInput) => {
   const { duration, name } = input;
   let expires_at = null;
@@ -109,7 +104,7 @@ export const addUserToken = async (context: AuthContext, user: AuthUser, input: 
     masked_token,
   };
 
-  const updates = [{ key: 'api_tokens', value: [newToken], operation: UPDATE_OPERATION_ADD }];
+  const updates = [{ key: apiTokens.name, value: [newToken], operation: UPDATE_OPERATION_ADD }];
   const { element } = await updateAttribute(context, user, user.id, ENTITY_TYPE_USER, updates);
 
   await publishUserAction({
@@ -149,7 +144,7 @@ export const revokeUserToken = async (context: AuthContext, user: AuthUser, toke
     throw FunctionalError('Token not found', { tokenId });
   }
 
-  const updates = [{ key: 'api_tokens', value: [tokenToRemove], operation: UPDATE_OPERATION_REMOVE }];
+  const updates = [{ key: apiTokens.name, value: [tokenToRemove], operation: UPDATE_OPERATION_REMOVE }];
   const { element } = await updateAttribute(context, user, user.id, ENTITY_TYPE_USER, updates);
 
   await publishUserAction({
@@ -186,7 +181,7 @@ export const revokeUserTokenByAdmin = async (context: AuthContext, user: AuthUse
     throw FunctionalError('Token not found', { tokenId });
   }
 
-  const updates = [{ key: 'api_tokens', value: [tokenToRemove], operation: UPDATE_OPERATION_REMOVE }];
+  const updates = [{ key: apiTokens.name, value: [tokenToRemove], operation: UPDATE_OPERATION_REMOVE }];
   const { element } = await updateAttribute(context, user, targetUserId, ENTITY_TYPE_USER, updates);
 
   await publishUserAction({
@@ -245,7 +240,7 @@ export const addUserTokenByAdmin = async (context: AuthContext, user: AuthUser, 
     masked_token,
   };
 
-  const updates = [{ key: 'api_tokens', value: [newToken], operation: UPDATE_OPERATION_ADD }];
+  const updates = [{ key: apiTokens.name, value: [newToken], operation: UPDATE_OPERATION_ADD }];
   const { element } = await updateAttribute(context, user, targetUserId, ENTITY_TYPE_USER, updates);
 
   await publishUserAction({
