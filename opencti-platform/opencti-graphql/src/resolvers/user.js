@@ -48,7 +48,6 @@ import {
   userIdDeleteRelation,
   userOrganizationsPaginated,
   userOrganizationsPaginatedWithoutInferences,
-  userRenewToken,
   userWithOrigin,
   userRoles,
   sendEmailToUser,
@@ -93,7 +92,7 @@ const userResolvers = {
     sessions: (current) => findUserSessions(current.id),
     effective_confidence_level: (current, _, context) => context.batch.userEffectiveConfidenceBatchLoader.load(current),
     personal_notifiers: (current, _, context) => getNotifiers(context, context.user, current.personal_notifiers),
-    api_tokens: (current) => current.api_tokens ?? [],
+    api_tokens: async (current, _, context) => context.batch.tokenBatchLoader.load(current),
   },
   Member: {
     name: (current, _, context) => {
@@ -122,7 +121,7 @@ const userResolvers = {
     draftContext: (current, _, context) => findDraftById(context, context.user, current.draft_context),
     effective_confidence_level: (current, _, context) => getUserEffectiveConfidenceLevel(current, context),
     personal_notifiers: (current, _, context) => getNotifiers(context, context.user, current.personal_notifiers),
-    api_tokens: (current) => current.api_tokens ?? [],
+    api_tokens: async (current, _, context) => context.batch.tokenBatchLoader.load(current),
   },
   UserSession: {
     user: (session, _, context) => loadCreator(context, context.user, session.user_id),
@@ -235,7 +234,6 @@ const userResolvers = {
       fieldPatch: ({ input }) => userEditField(context, context.user, id, input),
       contextPatch: ({ input }) => userEditContext(context, context.user, id, input),
       contextClean: () => userCleanContext(context, context.user, id),
-      tokenRenew: () => userRenewToken(context, context.user, id),
       relationAdd: ({ input }) => userAddRelation(context, context.user, id, input),
       relationDelete: ({ toId, relationship_type: relationshipType }) => {
         return userIdDeleteRelation(context, context.user, id, toId, relationshipType);
@@ -244,7 +242,6 @@ const userResolvers = {
       organizationDelete: ({ organizationId }) => userDeleteOrganizationRelation(context, context.user, id, organizationId),
     }),
     meEdit: (_, { input, password }, context) => meEditField(context, context.user, context.user.id, input, password),
-    meTokenRenew: (_, __, context) => userRenewToken(context, context.user, context.user.id),
     userAdd: (_, { input }, context) => addUser(context, context.user, input),
     bookmarkAdd: (_, { id, type }, context) => addBookmark(context, context.user, id, type),
     bookmarkDelete: (_, { id }, context) => deleteBookmark(context, context.user, id),

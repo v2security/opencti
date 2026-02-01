@@ -46,6 +46,7 @@ import { authorizedMembers } from '../schema/attribute-definition';
 import { ABSTRACT_INTERNAL_RELATIONSHIP, ABSTRACT_STIX_DOMAIN_OBJECT, OPENCTI_ADMIN_UUID } from '../schema/general';
 import { generateStandardId } from '../schema/identifier';
 import { ENTITY_TYPE_CAPABILITY, ENTITY_TYPE_GROUP, ENTITY_TYPE_ROLE, ENTITY_TYPE_SETTINGS, ENTITY_TYPE_USER } from '../schema/internalObject';
+import { getTokensUsage, updateTokenUsage } from '../database/redis/token_usage';
 import {
   isInternalRelationship,
   RELATION_ACCESSES_TO,
@@ -326,6 +327,12 @@ export const userGroupsPaginated = async (context, user, userId, opts) => {
 
 export const groupRolesPaginated = async (context, user, groupId, opts) => {
   return pageRegardingEntitiesConnection(context, user, groupId, RELATION_HAS_ROLE, ENTITY_TYPE_ROLE, false, opts);
+};
+
+export const batchUserTokens = async (__, _, batchUsers) => {
+  const tokenIds = batchUsers.flatMap((u) => u.api_tokens ?? []).map((token) => token.id);
+  const tokensMap = await getTokensUsage(tokenIds);
+  return batchUsers.map((u) => u.api_tokens.map((token) => ({ ...token, last_used_at: tokensMap[token.id] })));
 };
 
 export const batchRolesForUsers = async (context, user, userIds, opts = {}) => {
@@ -1654,17 +1661,18 @@ export const authenticateUserByToken = async (context, req, token) => {
     // Although we found the user, we need to ensure the token hasn't expired
     const userTokens = user.api_tokens || [];
     const matchingToken = userTokens.find((t) => t.hash === hashedToken);
-    if (matchingToken) {
-      if (matchingToken.expires_at) {
-        const now = new Date();
-        const expiresAt = new Date(matchingToken.expires_at);
-        if (now >= expiresAt) {
-          throw FunctionalError('Token expired');
-        }
+    // Checking expiration
+    if (matchingToken && matchingToken.expires_at) {
+      const now = new Date();
+      const expiresAt = new Date(matchingToken.expires_at);
+      if (now >= expiresAt) {
+        throw FunctionalError('Token expired');
       }
     }
-  }
-  if (user) {
+    // Update token usage
+    if (matchingToken) {
+      await updateTokenUsage(user.id, matchingToken.id);
+    }
     return internalAuthenticateUser(context, req, user);
   }
   throw FunctionalError('Cannot identify user with token');
@@ -1692,30 +1700,6 @@ const internalAuthenticateUser = async (context, req, user) => {
   }
   validateUser(authenticatedUser, settings);
   return userWithOrigin(req, authenticatedUser);
-};
-
-export const userRenewToken = async (context, user, userId) => {
-  if (userId === OPENCTI_ADMIN_UUID) {
-    throw FunctionalError('Cannot renew token of admin user defined in configuration, please change configuration instead.');
-  }
-
-  // check the user is accessible
-  const userData = await loadUserToUpdateWithAccessCheck(context, user, userId);
-
-  const patch = { api_token: uuid() };
-  const { element } = await patchAttribute(context, user, userId, ENTITY_TYPE_USER, patch);
-
-  const actionEmail = ENABLED_DEMO_MODE ? REDACTED_USER.user_email : userData.user_email;
-  await publishUserAction({
-    user,
-    event_type: 'mutation',
-    event_scope: 'update',
-    event_access: 'administration',
-    message: `renew token of user \`${actionEmail}\``,
-    context_data: { id: userId, entity_type: ENTITY_TYPE_USER },
-  });
-
-  return notify(BUS_TOPICS[ENTITY_TYPE_USER].EDIT_TOPIC, element, user);
 };
 
 /**

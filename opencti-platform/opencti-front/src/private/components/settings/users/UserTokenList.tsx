@@ -151,7 +151,7 @@ export const UserTokenList: React.FC<UserTokenListProps> = ({ node }) => {
             <TableHead>
               <TableRow>
                 <TableCell>{t_i18n('Name')}</TableCell>
-                <TableCell>{t_i18n('Created At')}</TableCell>
+                <TableCell>{t_i18n('Last Used')}</TableCell>
                 <TableCell>{t_i18n('Expires At')}</TableCell>
                 <TableCell align="right">{t_i18n('Actions')}</TableCell>
               </TableRow>
@@ -162,7 +162,7 @@ export const UserTokenList: React.FC<UserTokenListProps> = ({ node }) => {
                   <TableCell component="th" scope="row">
                     {token.name || '-'}
                   </TableCell>
-                  <TableCell>{nsdt(token.created_at)}</TableCell>
+                  <TableCell>{token.last_used_at ? nsdt(token.last_used_at) : t_i18n('Never used')}</TableCell>
                   <TableCell>
                     {token.expires_at ? nsdt(token.expires_at) : t_i18n('Unlimited')}
                     {' '}
@@ -225,6 +225,7 @@ export default createFragmentContainer(UserTokenList, {
         name
         created_at
         expires_at
+        last_used_at
       }
     }
   `,

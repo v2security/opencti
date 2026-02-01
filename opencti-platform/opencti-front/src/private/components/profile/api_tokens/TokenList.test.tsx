@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, Mock } from 'vitest';
 import React from 'react';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import testRender from '../../../../utils/tests/test-render';
 import { TokenListBase } from './TokenList';
 import { TokenList_node$data } from '@components/profile/api_tokens/__generated__/TokenList_node.graphql';

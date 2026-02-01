@@ -102,7 +102,7 @@ export const TokenListBase: React.FC<TokenListProps> = ({ node }) => {
         if (currentTokens) {
           userProxy.setLinkedRecords(
             currentTokens.filter((t: RecordProxy) => t.getDataID() !== deletingToken.id),
-            'api_tokens'
+            'api_tokens',
           );
         }
       },
@@ -138,7 +138,7 @@ export const TokenListBase: React.FC<TokenListProps> = ({ node }) => {
             <TableRow>
               <TableCell>{t_i18n('Name')}</TableCell>
               <TableCell>{t_i18n('Token')}</TableCell>
-              <TableCell>{t_i18n('Created At')}</TableCell>
+              <TableCell>{t_i18n('Last Used')}</TableCell>
               <TableCell>{t_i18n('Expires At')}</TableCell>
               <TableCell align="right">{t_i18n('Actions')}</TableCell>
             </TableRow>
@@ -147,12 +147,12 @@ export const TokenListBase: React.FC<TokenListProps> = ({ node }) => {
             {tokens.map((token) => (
               <TableRow key={token.id}>
                 <TableCell component="th" scope="row">
-                  {token.name || '-'}
+                  {token.name}
                 </TableCell>
                 <TableCell>
                   {token.masked_token}
                 </TableCell>
-                <TableCell>{nsdt(token.created_at)}</TableCell>
+                <TableCell>{token.last_used_at ? nsdt(token.last_used_at) : t_i18n('Never used')}</TableCell>
                 <TableCell>
                   {token.expires_at ? nsdt(token.expires_at) : t_i18n('Unlimited')}
                   {' '}
@@ -209,6 +209,7 @@ export default createFragmentContainer(TokenListBase, {
         name
         created_at
         expires_at
+        last_used_at
         masked_token
       }
     }

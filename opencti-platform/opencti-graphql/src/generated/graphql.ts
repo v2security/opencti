@@ -404,6 +404,7 @@ export type ApiToken = {
   created_at?: Maybe<Scalars['DateTime']['output']>;
   expires_at?: Maybe<Scalars['DateTime']['output']>;
   id: Scalars['ID']['output'];
+  last_used_at?: Maybe<Scalars['DateTime']['output']>;
   masked_token?: Maybe<Scalars['String']['output']>;
   name?: Maybe<Scalars['String']['output']>;
 };
@@ -15429,7 +15430,6 @@ export type Mutation = {
   markingDefinitionAdd?: Maybe<MarkingDefinition>;
   markingDefinitionEdit?: Maybe<MarkingDefinitionEditMutations>;
   meEdit?: Maybe<MeUser>;
-  meTokenRenew?: Maybe<MeUser>;
   metricPatch?: Maybe<BasicObject>;
   narrativeAdd?: Maybe<Narrative>;
   narrativeContextClean?: Maybe<Narrative>;
@@ -38612,6 +38612,7 @@ export type ApiTokenResolvers<ContextType = any, ParentType extends ResolversPar
   created_at?: Resolver<Maybe<ResolversTypes['DateTime']>, ParentType, ContextType>;
   expires_at?: Resolver<Maybe<ResolversTypes['DateTime']>, ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  last_used_at?: Resolver<Maybe<ResolversTypes['DateTime']>, ParentType, ContextType>;
   masked_token?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   name?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
 }>;
@@ -43857,7 +43858,6 @@ export type MutationResolvers<ContextType = any, ParentType extends ResolversPar
   markingDefinitionAdd?: Resolver<Maybe<ResolversTypes['MarkingDefinition']>, ParentType, ContextType, RequireFields<MutationMarkingDefinitionAddArgs, 'input'>>;
   markingDefinitionEdit?: Resolver<Maybe<ResolversTypes['MarkingDefinitionEditMutations']>, ParentType, ContextType, RequireFields<MutationMarkingDefinitionEditArgs, 'id'>>;
   meEdit?: Resolver<Maybe<ResolversTypes['MeUser']>, ParentType, ContextType, RequireFields<MutationMeEditArgs, 'input'>>;
-  meTokenRenew?: Resolver<Maybe<ResolversTypes['MeUser']>, ParentType, ContextType>;
   metricPatch?: Resolver<Maybe<ResolversTypes['BasicObject']>, ParentType, ContextType, RequireFields<MutationMetricPatchArgs, 'id' | 'input'>>;
   narrativeAdd?: Resolver<Maybe<ResolversTypes['Narrative']>, ParentType, ContextType, RequireFields<MutationNarrativeAddArgs, 'input'>>;
   narrativeContextClean?: Resolver<Maybe<ResolversTypes['Narrative']>, ParentType, ContextType, RequireFields<MutationNarrativeContextCleanArgs, 'id'>>;
