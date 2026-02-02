@@ -44,6 +44,7 @@ import useSensitiveModifications from '../../../../utils/hooks/useSensitiveModif
 import { connectorDeletionMutation, connectorResetStateMutation } from './Connector';
 import SortConnectorsHeader from './SortConnectorsHeader';
 import canDeleteConnector from './utils/canDeleteConnector';
+import BooleanStatusIcon from '../../../../components/common/icons/BooleanStatusIcon';
 
 const interval$ = interval(FIVE_SECONDS);
 
@@ -444,11 +445,7 @@ const ConnectorsStatusContent: FunctionComponent<ConnectorsStatusContentProps> =
                               className={classes.bodyItem}
                               style={{ justifyContent: 'center' }}
                             >
-                              {
-                                connector.is_managed
-                                  ? <CheckIcon sx={{ color: theme.palette.designSystem.tertiary.green[600] }} />
-                                  : <CloseIcon sx={{ color: theme.palette.designSystem.tertiary.red[700] }} />
-                              }
+                              <BooleanStatusIcon status={connector.is_managed} />
                             </div>
                           </div>
                         )}
