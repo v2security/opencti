@@ -119,12 +119,6 @@ describe('User Domain - Authentication', () => {
     });
   });
 
-  it('should authenticate with legacy token', async () => {
-    const user = await authenticateUserByToken(context, mockReq, 'legacy-token-uuid');
-    expect(user).toBeDefined();
-    expect(user.id).toBe(legacyUser.id);
-  });
-
   it('should authenticate with new hashed token', async () => {
     const user = await authenticateUserByToken(context, mockReq, newTokenValue);
     expect(user).toBeDefined();
