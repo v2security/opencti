@@ -51,7 +51,6 @@ interface AuthUser extends BasicStoreIdentifier {
   allowed_marking: Array<StoreMarkingDefinition>;
   default_marking?: Array<{ entity_type: string; values: Array<StoreMarkingDefinition> }>;
   max_shareable_marking: Array<StoreMarkingDefinition>;
-  api_token?: string;
   api_tokens: Array<UserApiToken>;
   account_status: string;
   effective_confidence_level: ConfidenceLevel | null;

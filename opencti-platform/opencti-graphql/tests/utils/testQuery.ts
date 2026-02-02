@@ -17,6 +17,7 @@ import { ENTITY_TYPE_IDENTITY_ORGANIZATION } from '../../src/modules/organizatio
 import type { ConfidenceLevel } from '../../src/generated/graphql';
 import { findById } from '../../src/domain/user';
 import { computeLoaders } from '../../src/http/httpAuthenticatedContext';
+import { hashSHA256 } from '../../src/utils/hash';
 // endregion
 
 export const SYNC_RAW_START_REMOTE_URI = conf.get('app:sync_raw_start_remote_uri');
@@ -53,6 +54,16 @@ export const createHttpClient = (email?: string, password?: string) => {
       'Content-Type': 'application/json',
       Accept: 'application/json',
       authorization: generateBasicAuth(email, password),
+    },
+  }));
+};
+
+export const createTokenHttpClient = (token: string) => {
+  return wrapper(axios.create({
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      authorization: `Bearer ${token}`,
     },
   }));
 };
@@ -108,7 +119,11 @@ const ROLE_PARTICIPATE: Role = {
   id: generateStandardId(ENTITY_TYPE_ROLE, { name: 'Access knowledge and participate' }),
   name: 'Access knowledge and participate',
   description: 'Only participate',
-  capabilities: ['KNOWLEDGE_KNPARTICIPATE', 'EXPLORE_EXUPDATE_EXDELETE'],
+  capabilities: [
+    'KNOWLEDGE_KNPARTICIPATE',
+    'EXPLORE_EXUPDATE_EXDELETE',
+    'APIACCESS_USEBASICAUTH',
+  ],
 };
 TESTING_ROLES.push(ROLE_PARTICIPATE);
 export const ROLE_EDITOR: Role = {
@@ -122,6 +137,8 @@ export const ROLE_EDITOR: Role = {
     'EXPLORE_EXUPDATE_PUBLISH',
     'TAXIIAPI_SETCOLLECTIONS',
     'KNOWLEDGE_KNUPDATE_KNMANAGEAUTHMEMBERS',
+    'APIACCESS_USETOKEN',
+    'APIACCESS_USEBASICAUTH',
   ],
 };
 TESTING_ROLES.push(ROLE_EDITOR);
@@ -130,7 +147,16 @@ export const ROLE_SECURITY: Role = {
   id: generateStandardId(ENTITY_TYPE_ROLE, { name: 'Access knowledge/exploration/settings and edit/delete' }),
   name: 'Access knowledge/exploration/settings and edit/delete',
   description: 'Knowledge/exploration/settings edit/delete',
-  capabilities: ['KNOWLEDGE_KNUPDATE_KNDELETE', 'KNOWLEDGE_KNUPDATE_KNMERGE', 'EXPLORE_EXUPDATE_EXDELETE', 'INVESTIGATION_INUPDATE_INDELETE', 'SETTINGS_SETACCESSES', 'SETTINGS_SECURITYACTIVITY', 'AUTOMATION_AUTMANAGE'],
+  capabilities: [
+    'KNOWLEDGE_KNUPDATE_KNDELETE',
+    'KNOWLEDGE_KNUPDATE_KNMERGE',
+    'EXPLORE_EXUPDATE_EXDELETE',
+    'INVESTIGATION_INUPDATE_INDELETE',
+    'SETTINGS_SETACCESSES',
+    'SETTINGS_SECURITYACTIVITY',
+    'AUTOMATION_AUTMANAGE',
+    'APIACCESS_USEBASICAUTH',
+  ],
 };
 TESTING_ROLES.push(ROLE_SECURITY);
 
@@ -152,6 +178,7 @@ export const ROLE_TEST_CONNECTOR: Role = {
     'TAXIIAPI',
     'SETTINGS_SETMARKINGS',
     'SETTINGS_SETLABELS',
+    'APIACCESS_USEBASICAUTH',
   ],
 };
 TESTING_ROLES.push(ROLE_TEST_CONNECTOR);
@@ -174,6 +201,7 @@ export const ROLE_DISINFORMATION_ANALYST: Role = {
     'INGESTION_SETINGESTIONS',
     'CSVMAPPERS',
     'SETTINGS_SETLABELS',
+    'APIACCESS_USEBASICAUTH',
   ],
 };
 TESTING_ROLES.push(ROLE_DISINFORMATION_ANALYST);
@@ -190,6 +218,7 @@ export const ROLE_PLATFORM_ADMIN: Role = {
     'SETTINGS_SUPPORT',
     'MODULES_MODMANAGE',
     'EXPLORE_EXUPDATE_PUBLISH',
+    'APIACCESS_USEBASICAUTH',
   ],
 };
 TESTING_ROLES.push(ROLE_PLATFORM_ADMIN);
@@ -329,8 +358,14 @@ export const ADMIN_USER: AuthUser = {
   allowed_marking: [],
   default_marking: [],
   origin: { referer: 'test', user_id: '88ec0c6a-13ce-5e39-b486-354fe4a7084f' },
-  api_token: 'd434ce02-e58e-4cac-8b4c-42bf16748e84',
-  api_tokens: [],
+  api_tokens: [{
+    id: 'default',
+    name: 'default',
+    hash: hashSHA256('d434ce02-e58e-4cac-8b4c-42bf16748e84'),
+    created_at: '2026-01-31T17:46:16Z',
+    expires_at: null,
+    masked_token: 'xxx',
+  }],
   account_status: ACCOUNT_STATUS_ACTIVE,
   account_lock_after_date: undefined,
   effective_confidence_level: {
@@ -466,11 +501,13 @@ const createGroup = async (input: GroupTestData): Promise<string> => {
   }
   for (let index = 0; index < input.max_shareable_markings.length; index += 1) {
     const maxMarking = input.max_shareable_markings[index];
-    await internalAdminQuery(GROUP_EDITION_SHAREABLE_MARKINGS_MUTATION, { groupId: data.groupAdd.id,
+    await internalAdminQuery(GROUP_EDITION_SHAREABLE_MARKINGS_MUTATION, {
+      groupId: data.groupAdd.id,
       input: {
         key: 'max_shareable_markings',
         value: [{ type: 'TLP', value: maxMarking }],
-      } });
+      },
+    });
   }
   for (let index = 0; index < input.roles.length; index += 1) {
     const role = input.roles[index];
@@ -615,10 +652,7 @@ const createUser = async (user: UserTestData) => {
 };
 // Create all testing users
 export const createTestUsers = async () => {
-  for (let index = 0; index < TESTING_USERS.length; index += 1) {
-    const user = TESTING_USERS[index];
-    await createUser(user);
-  }
+  await Promise.all(TESTING_USERS.map((user) => createUser(user)));
 };
 // Search for test users
 const USERS_SEARCH_QUERY = `
@@ -717,8 +751,14 @@ export const buildStandardUser = (
     default_marking: [],
     max_shareable_marking: [],
     origin: { referer: 'test', user_id: '98ec0c6a-13ce-5e39-b486-354fe4a7084f' },
-    api_token: 'd434ce02-e58e-4cac-8b4c-42bf16748e85',
-    api_tokens: [],
+    api_tokens: [{
+      id: 'default',
+      name: 'default',
+      hash: hashSHA256('d434ce02-e58e-4cac-8b4c-42bf16748e85'),
+      created_at: '2026-01-31T17:46:16Z',
+      expires_at: null,
+      masked_token: 'xxx',
+    }],
     account_status: ACCOUNT_STATUS_ACTIVE,
     account_lock_after_date: undefined,
     effective_confidence_level: {

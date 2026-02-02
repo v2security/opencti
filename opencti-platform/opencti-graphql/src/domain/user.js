@@ -186,11 +186,10 @@ const extractInfoFromBasicAuth = (authorization) => {
   return {};
 };
 
-const extractTokenFromBasicAuth = async (authorization) => {
+const extractUserFromBasicAuth = async (authorization) => {
   const { username, password } = extractInfoFromBasicAuth(authorization);
   if (username && password) {
-    const { api_token: tokenUUID } = await login(username, password);
-    return tokenUUID;
+    return { username, password };
   }
   return null;
 };
@@ -1652,17 +1651,36 @@ export const resolveUserById = async (context, id) => {
   return buildCompleteUser(context, client);
 };
 
+export const authenticateUserByBasicAuth = async (context, req, basicAuth) => {
+  const platformUsers = await getEntitiesMapFromCache(context, SYSTEM_USER, ENTITY_TYPE_USER);
+  const loggedUser = await login(basicAuth.username, basicAuth.password);
+  const user = platformUsers.get(loggedUser.id);
+  if (user) {
+    if (!isUserHasCapability(user, 'APIACCESS_USEBASICAUTH')) {
+      throw ForbiddenAccess('You are not allowed to use API basic auth');
+    }
+    return internalAuthenticateUser(context, req, user);
+  }
+  throw FunctionalError('Cannot identify user with basic auth');
+};
+
 export const authenticateUserByToken = async (context, req, token) => {
   const platformUsers = await getEntitiesMapFromCache(context, SYSTEM_USER, ENTITY_TYPE_USER);
   const hashedToken = hashSHA256(token);
   const user = platformUsers.get(hashedToken);
   if (user) {
+    if (!isUserHasCapability(user, 'APIACCESS_USETOKEN')) {
+      throw ForbiddenAccess('You are not allowed to use API Access Tokens');
+    }
     // User found by hash, finding the specific token to check expiration
     // Although we found the user, we need to ensure the token hasn't expired
     const userTokens = user.api_tokens || [];
     const matchingToken = userTokens.find((t) => t.hash === hashedToken);
+    if (!matchingToken) {
+      throw FunctionalError('Cannot identify user with token');
+    }
     // Checking expiration
-    if (matchingToken && matchingToken.expires_at) {
+    if (matchingToken.expires_at) {
       const now = new Date();
       const expiresAt = new Date(matchingToken.expires_at);
       if (now >= expiresAt) {
@@ -1802,17 +1820,23 @@ export const authenticateUserFromRequest = async (context, req) => {
     }
   }
   // If user not identified, try to extract token from bearer
-  let tokenUUID = extractTokenFromBearer(req.headers.authorization);
-  // If no bearer specified, try with basic auth
-  if (!tokenUUID) {
-    tokenUUID = await extractTokenFromBasicAuth(req.headers.authorization);
-  }
-  // Get user from the token if found
-  if (tokenUUID) {
+  const bearerToken = extractTokenFromBearer(req.headers.authorization);
+  if (bearerToken) {
     try {
-      return await authenticateUserByToken(context, req, tokenUUID);
+      return await authenticateUserByToken(context, req, bearerToken);
     } catch (err) {
       logApp.warn('Error resolving user by token', { cause: err });
+      return undefined;
+    }
+  }
+  // If no bearer specified, try with basic auth
+  const basicAuth = await extractUserFromBasicAuth(req.headers.authorization);
+  if (basicAuth) {
+    try {
+      return await authenticateUserByBasicAuth(context, req, basicAuth);
+    } catch (err) {
+      logApp.warn('Error resolving user by basic auth', { cause: err });
+      return undefined;
     }
   }
   // endregion

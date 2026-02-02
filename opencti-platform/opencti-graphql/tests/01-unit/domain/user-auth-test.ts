@@ -36,6 +36,7 @@ describe('User Domain - Authentication', () => {
     organizations: [],
     user_service_account: false,
     account_lock_after_date: null,
+    capabilities: [{ name: 'APIACCESS_USETOKEN' }],
   };
 
   const newTokenValue = 'flgrn_octi_tkn_secureRandomString';
@@ -58,6 +59,7 @@ describe('User Domain - Authentication', () => {
     organizations: [],
     user_service_account: false,
     account_lock_after_date: null,
+    capabilities: [{ name: 'APIACCESS_USETOKEN' }],
   };
 
   const expiredTokenValue = 'flgrn_octi_tkn_expired';
@@ -77,6 +79,7 @@ describe('User Domain - Authentication', () => {
     organizations: [],
     user_service_account: false,
     account_lock_after_date: null,
+    capabilities: [{ name: 'APIACCESS_USETOKEN' }],
   };
 
   beforeEach(() => {
@@ -189,5 +192,23 @@ describe('User Domain - Authentication', () => {
 
     await expect(authenticateUserByToken(context, mockReq, revokedTokenValue))
       .rejects.toThrowError('Cannot identify user with token'); // Logic check needed
+  });
+  it('should reject authentication if user lacks SETTINGS_SETACCESSTOKEN capability', async () => {
+    const noCapUser = {
+      ...modernUser,
+      id: 'no-cap-user',
+      capabilities: [{ name: 'SOME_OTHER_CAP' }],
+    };
+    const validTokenValue = 'flgrn_octi_tkn_nocap';
+    const validHash = hashSHA256(validTokenValue);
+
+    noCapUser.api_tokens = [{ id: 't1', hash: validHash, name: 'T1', created_at: new Date().toISOString() }];
+
+    const usersMap = new Map();
+    usersMap.set(validHash, noCapUser);
+    vi.spyOn(Cache, 'getEntitiesMapFromCache').mockResolvedValue(usersMap);
+
+    await expect(authenticateUserByToken(context, mockReq, validTokenValue))
+      .rejects.toThrowError('You are not allowed to use API Access Tokens');
   });
 });

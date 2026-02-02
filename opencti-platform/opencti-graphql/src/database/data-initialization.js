@@ -114,6 +114,15 @@ const AUTOMATION_CAPABILITIES = {
     },
   ],
 };
+export const API_ACCESS_CAPABILITIES = {
+  name: 'APIACCESS',
+  attribute_order: 2200,
+  description: 'API usage with authorization header',
+  dependencies: [
+    { name: 'USETOKEN', description: 'Allow token usage', attribute_order: 2250 },
+    { name: 'USEBASICAUTH', description: 'Allow basic auth usage', attribute_order: 2290 },
+  ],
+};
 export const CAPABILITIES = [
   BYPASS_CAPABILITIES,
   KNOWLEDGE_CAPABILITIES,
@@ -158,6 +167,7 @@ export const CAPABILITIES = [
   PIR_CAPABILITIES,
   AUTOMATION_CAPABILITIES,
   SETTINGS_CAPABILITIES,
+  API_ACCESS_CAPABILITIES,
   {
     name: 'CONNECTORAPI',
     attribute_order: 2300,
@@ -365,6 +375,7 @@ const createBasicRolesAndCapabilities = async (context) => {
     name: 'Connector',
     description: 'Connector role that has the recommended capabilities',
     capabilities: [
+      'APIACCESS_USETOKEN',
       'KNOWLEDGE_KNUPDATE_KNDELETE',
       'KNOWLEDGE_KNUPDATE_KNMERGE',
       'KNOWLEDGE_KNUPDATE_KNBYPASSFIELDS',

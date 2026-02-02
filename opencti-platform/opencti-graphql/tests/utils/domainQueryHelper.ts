@@ -39,7 +39,6 @@ export const getGroupEntity = async (testGroup: GroupTestData) => {
 export const getFakeAuthUser = (userName: string) => {
   const userId = uuid();
   const user: AuthUser = {
-    api_token: uuid(),
     api_tokens: [],
     individual_id: undefined,
     administrated_organizations: [],

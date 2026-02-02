@@ -26,7 +26,7 @@ import inject18n, { useFormatter } from '../../../components/i18n';
 import TextField from '../../../components/TextField';
 import SelectField from '../../../components/fields/SelectField';
 import { commitMutation, MESSAGING$, QueryRenderer } from '../../../relay/environment';
-import useGranted, { KNOWLEDGE } from '../../../utils/hooks/useGranted';
+import useGranted, { KNOWLEDGE, APIACCESS_USETOKEN } from '../../../utils/hooks/useGranted';
 import Loader from '../../../components/Loader';
 import { convertOrganizations } from '../../../utils/edition';
 import ObjectOrganizationField from '../common/form/ObjectOrganizationField';
@@ -213,6 +213,7 @@ const ProfileOverviewComponent = (props) => {
   const objectOrganization = convertOrganizations(me);
   const [display2FA, setDisplay2FA] = useState(false);
   const hasKnowledgeAccess = useGranted([KNOWLEDGE]);
+  const hasAccessTokenCapability = useGranted([APIACCESS_USETOKEN]);
   const [displayTokenCreation, setDisplayTokenCreation] = useState(false);
 
   const fieldNames = [
@@ -595,14 +596,16 @@ const ProfileOverviewComponent = (props) => {
           </Typography>
           <pre>{about.version}</pre>
           <div style={{ display: 'flex', justifyContent: 'end', marginTop: 16, gap: 10 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={() => setDisplayTokenCreation(true)}
-            >
-              {t('Generate Token')}
-            </Button>
-            {isPlaygroundEnable() && (
+            {hasAccessTokenCapability && (
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={() => setDisplayTokenCreation(true)}
+              >
+                {t('Generate Token')}
+              </Button>
+            )}
+            {hasAccessTokenCapability && isPlaygroundEnable() && (
               <Button
                 variant="contained"
                 color="primary"

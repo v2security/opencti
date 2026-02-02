@@ -5,6 +5,15 @@ import { publishUserAction } from '../../../../src/listener/UserActionListener';
 import { ENTITY_TYPE_USER } from '../../../../src/schema/internalObject';
 import { TokenDuration } from '../../../../src/generated/graphql';
 import type { AuthContext, AuthUser } from '../../../../src/types/user';
+import { isUserHasCapability } from '../../../../src/utils/access';
+
+vi.mock('../../../../src/utils/access', async () => {
+  const actual: any = await vi.importActual('../../../../src/utils/access');
+  return {
+    ...actual,
+    isUserHasCapability: vi.fn(),
+  };
+});
 
 vi.mock('../../../../src/database/middleware', () => ({
   updateAttribute: vi.fn().mockResolvedValue({ element: { id: 'user-id' } }),
@@ -32,6 +41,7 @@ describe('User Domain', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (internalLoadById as any).mockResolvedValue(user);
+    (isUserHasCapability as any).mockReturnValue(true);
   });
 
   describe('addUserToken', () => {
@@ -101,6 +111,13 @@ describe('User Domain', () => {
 
       expect(result.expires_at).toBeNull();
       expect(publishUserAction).toHaveBeenCalled();
+      expect(publishUserAction).toHaveBeenCalled();
+    });
+
+    it('should throw if user lacks capability', async () => {
+      (isUserHasCapability as any).mockReturnValue(false);
+      await expect(addUserToken(context, user, { name: 'T', duration: TokenDuration.Days_30 }))
+        .rejects.toThrow('You are not allowed use API tokens');
     });
   });
 
@@ -140,6 +157,13 @@ describe('User Domain', () => {
 
     it('should throw if token not found', async () => {
       await expect(revokeUserToken(context, user, 'non-existent')).rejects.toThrow('Token not found');
+      await expect(revokeUserToken(context, user, 'non-existent')).rejects.toThrow('Token not found');
+    });
+
+    it('should throw if user lacks capability', async () => {
+      (isUserHasCapability as any).mockReturnValue(false);
+      await expect(revokeUserToken(context, user, 'token-id'))
+        .rejects.toThrow('You are not allowed use API tokens');
     });
   });
 });

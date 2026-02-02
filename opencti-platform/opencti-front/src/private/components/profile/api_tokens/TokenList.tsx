@@ -17,11 +17,13 @@ import {
   DialogActions,
   Button,
   DialogTitle,
+  Alert,
 } from '@mui/material';
 import { Delete } from '@mui/icons-material';
 import makeStyles from '@mui/styles/makeStyles';
 import { Theme } from '../../../../components/Theme';
 import { useFormatter } from '../../../../components/i18n';
+import useGranted, { APIACCESS_USETOKEN } from '../../../../utils/hooks/useGranted';
 import { commitMutation, MESSAGING$ } from '../../../../relay/environment';
 import { TokenList_node$data } from './__generated__/TokenList_node.graphql';
 
@@ -61,6 +63,15 @@ export const TokenListBase: React.FC<TokenListProps> = ({ node }) => {
   const classes = useStyles();
   const { t_i18n, nsdt } = useFormatter();
   const [deletingToken, setDeletingToken] = useState<{ id: string; name: string } | null>(null);
+  const hasAccessTokenCapability = useGranted([APIACCESS_USETOKEN]);
+
+  if (!hasAccessTokenCapability) {
+    return (
+      <Alert severity="warning" variant="outlined">
+        {t_i18n('You do not have the right to use API tokens.')}
+      </Alert>
+    );
+  }
 
   const tokens = node.api_tokens || [];
   const now = new Date();

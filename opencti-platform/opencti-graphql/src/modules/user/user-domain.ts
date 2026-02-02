@@ -2,10 +2,10 @@ import { v4 as uuid } from 'uuid';
 import { DateTime } from 'luxon';
 import type { AuthContext, AuthUser } from '../../types/user';
 import { addUser, findUserPaginated } from '../../domain/user';
-import { SYSTEM_USER } from '../../utils/access';
+import { SYSTEM_USER, isUserHasCapability } from '../../utils/access';
 import type { BasicGroupEntity } from '../../types/store';
 import { findDefaultIngestionGroups } from '../../domain/group';
-import { FunctionalError, ValidationError } from '../../config/errors';
+import { FunctionalError, ValidationError, ForbiddenAccess } from '../../config/errors';
 import { TokenDuration, type UserAddInput, type UserTokenAddInput } from '../../generated/graphql';
 import { getEntityFromCache } from '../../database/cache';
 import type { BasicStoreSettings } from '../../types/settings';
@@ -76,6 +76,9 @@ export const createOnTheFlyUser = async (context: AuthContext, user: AuthUser, i
 
 // -- API Token Logic --
 export const addUserToken = async (context: AuthContext, user: AuthUser, input: UserTokenAddInput) => {
+  if (!isUserHasCapability(user, 'APIACCESS_USETOKEN')) {
+    throw ForbiddenAccess('You are not allowed use API tokens');
+  }
   const { duration, name } = input;
   let expires_at = null;
   if (duration && duration !== TokenDuration.Unlimited) {
@@ -136,6 +139,9 @@ export const addUserToken = async (context: AuthContext, user: AuthUser, input: 
 };
 
 export const revokeUserToken = async (context: AuthContext, user: AuthUser, tokenId: string) => {
+  if (!isUserHasCapability(user, 'APIACCESS_USETOKEN')) {
+    throw ForbiddenAccess('You are not allowed use API tokens');
+  }
   // Reload user to ensure we have the latest tokens
   const userToEdit = await internalLoadById(context, user, user.id) as unknown as AuthUser;
   const tokens = userToEdit.api_tokens || [];
