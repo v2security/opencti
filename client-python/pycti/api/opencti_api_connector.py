@@ -75,7 +75,10 @@ class OpenCTIApiConnector:
                     id
                     name
                     connector_user {
-                      api_token
+                      api_tokens {
+                        id
+                        name
+                      }
                     }
                     connector_priority_group
                     config {

@@ -1833,9 +1833,11 @@ class OpenCTIConnectorHelper:  # pylint: disable=too-many-public-methods
                         "filters": [{"key": "user_email", "values": [user_email]}],
                         "filterGroups": [],
                     },
-                    include_token=True,
+                    include_tokens=True,
                 )
+                token_name = "Connector auto generated token"
                 if user is None:
+                    # Create user
                     user = temp_api.user.create(
                         name="[C] " + self.connect_name,
                         user_email=user_email,
@@ -1844,11 +1846,33 @@ class OpenCTIConnectorHelper:  # pylint: disable=too-many-public-methods
                             "overrides": [],
                         },
                         groups=[groups[0]["id"]],
-                        include_token=True,
                         user_service_account=True,
                     )
+                    token = temp_api.user.create_token(
+                        user_id=user["id"], token_name=token_name
+                    )
+                    # Create a token
+                    self.opencti_token = token["plaintext_token"]
                 if user is not None:
-                    self.opencti_token = user["api_token"]
+                    # Renew the token (deleting by name + recreating)
+                    # Find the existing one and delete if exists
+                    existing_token = next(
+                        (
+                            item
+                            for item in user["api_tokens"]
+                            if item["name"] == token_name
+                        ),
+                        None,
+                    )
+                    if existing_token is not None:
+                        temp_api.user.remove_token(
+                            user_id=user["id"], token_id=existing_token["id"]
+                        )
+                    # Create new one
+                    token = temp_api.user.create_token(
+                        user_id=user["id"], token_name=token_name
+                    )
+                    self.opencti_token = token["plaintext_token"]
 
         # - Classic API that will be directly attached to the connector rights
         self.api = OpenCTIApiClient(
