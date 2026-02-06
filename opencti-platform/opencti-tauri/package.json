@@ -1,0 +1,27 @@
+{
+  "name": "opencti-desktop",
+  "version": "6.9.16",
+  "private": true,
+  "description": "OpenCTI Desktop Application",
+  "type": "module",
+  "scripts": {
+    "tauri": "cargo tauri",
+    "dev": "cargo tauri dev",
+    "build": "cargo tauri build",
+    "build:debug": "cargo tauri build --debug",
+    "prebuild": "cd ../opencti-front && yarn build:standalone",
+    "install-tauri-cli": "cargo install tauri-cli"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "@tauri-apps/plugin-fs": "^2.0.0",
+    "@tauri-apps/plugin-notification": "^2.0.0",
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "@tauri-apps/plugin-store": "^2.0.0",
+    "@tauri-apps/plugin-updater": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
