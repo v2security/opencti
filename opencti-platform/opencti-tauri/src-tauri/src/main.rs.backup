@@ -1,0 +1,121 @@
+// Prevents additional console window on Windows in release mode
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use tauri::Manager;
+
+/// Command to save exported file with native dialog
+#[tauri::command]
+async fn save_export(
+    filename: String,
+    content: Vec<u8>,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+    
+    let file_path = app_handle
+        .dialog()
+        .file()
+        .set_file_name(&filename)
+        .blocking_save_file();
+    
+    match file_path {
+        Some(path) => {
+            let path_str = path.to_string();
+            std::fs::write(&path_str, content)
+                .map_err(|e| format!("Failed to write file: {}", e))?;
+            
+            app_handle
+                .dialog()
+                .message(format!("File saved successfully"))
+                .kind(MessageDialogKind::Info)
+                .blocking_show();
+            
+            Ok(path_str)
+        }
+        None => Ok("cancelled".to_string()),
+    }
+}
+
+/// Command to open file picker and read content
+#[tauri::command]
+async fn open_file(app_handle: tauri::AppHandle) -> Result<(String, Vec<u8>), String> {
+    use tauri_plugin_dialog::DialogExt;
+    
+    let file_path = app_handle
+        .dialog()
+        .file()
+        .blocking_pick_file();
+    
+    match file_path {
+        Some(path) => {
+            let path_str = path.to_string();
+            let content = std::fs::read(&path_str)
+                .map_err(|e| format!("Failed to read file: {}", e))?;
+            
+            // Extract filename from path
+            let filename = std::path::Path::new(&path_str)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            
+            Ok((filename, content))
+        }
+        None => Err("No file selected".to_string()),
+    }
+}
+
+/// Command to show native notification  
+#[tauri::command]
+async fn show_notification(
+    title: String,
+    body: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+    
+    app_handle
+        .notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|e| format!("Failed to show notification: {}", e))
+}
+
+/// Command to get platform information
+#[tauri::command]
+fn get_platform_info() -> serde_json::Value {
+    serde_json::json!({
+        "platform": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+        "is_desktop": true,
+        "version": env!("CARGO_PKG_VERSION")
+    })
+}
+
+fn main() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            save_export,
+            open_file,
+            show_notification,
+            get_platform_info
+        ])
+        .setup(|app| {
+            #[cfg(debug_assertions)]
+            {
+                let window = app.get_webview_window("main").unwrap();
+                window.open_devtools();
+            }
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

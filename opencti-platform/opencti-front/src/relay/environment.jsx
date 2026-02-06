@@ -51,16 +51,29 @@ export const APP_BASE_PATH = isEmptyPath || contextPath.startsWith('/') ? contex
 
 export const fileUri = (fileImport) => `${APP_BASE_PATH}${fileImport}`; // No slash here, will be replace by the builder
 
+// Desktop app support: Allow override of API URL for Tauri/Electron apps
+const GRAPHQL_URL = window.OPENCTI_API_URL
+  ? `${window.OPENCTI_API_URL}/graphql`
+  : `${APP_BASE_PATH}/graphql`;
+
 // Create Network
 let subscriptionClient;
 const loc = window.location;
 const isSecure = loc.protocol === 'https:' ? 's' : '';
-const subscriptionUrl = `ws${isSecure}://${loc.host}${APP_BASE_PATH}/graphql`;
+const subscriptionUrl = window.OPENCTI_API_URL
+  ? `ws${isSecure}://${new URL(window.OPENCTI_API_URL).host}/graphql`
+  : `ws${isSecure}://${loc.host}${APP_BASE_PATH}/graphql`;
 const subscribeFn = (request, variables) => {
   if (!subscriptionClient) {
     // Lazy creation of the subscription client to connect only after auth
     subscriptionClient = createClient({
       url: subscriptionUrl,
+      // For desktop apps, pass API token through connection params
+      connectionParams: window.OPENCTI_API_URL ? async () => {
+        // In desktop mode, authentication is handled by the proxy
+        // Return empty params - proxy adds Authorization header
+        return {};
+      } : undefined,
     });
   }
   return Observable.create((sink) => {
@@ -72,7 +85,7 @@ const subscribeFn = (request, variables) => {
   });
 };
 const fetchMiddleware = urlMiddleware({
-  url: `${APP_BASE_PATH}/graphql`,
+  url: GRAPHQL_URL,
   credentials: 'same-origin',
   // --- to add when we enable csrfPrevention in ApolloServer ---
   // headers: (request) => {
