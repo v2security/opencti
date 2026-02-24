@@ -19,7 +19,6 @@ import { ENTITY_TYPE_MARKING_DEFINITION } from '../schema/stixMetaObject';
 import { decodeLicensePem, getEnterpriseEditionInfo } from '../modules/settings/licensing';
 import { getClusterInformation } from '../database/cluster-module';
 import { completeXTMHubDataForRegistration } from '../utils/settings.helper';
-import { XTM_ONE_CHATBOT_URL } from '../http/httpChatbotProxy';
 import { findById as findThemeById } from '../modules/theme/theme-domain';
 
 export const getMemoryStatistics = () => {
@@ -130,7 +129,7 @@ export const getSettings = async (context) => {
     platform_theme: platformTheme,
     platform_trash_enabled: nconf.get('app:trash:enabled') ?? true,
     platform_translations: nconf.get('app:translations') ?? '{}',
-    filigran_chatbot_ai_url: XTM_ONE_CHATBOT_URL,
+    filigran_chatbot_ai_url: `${nconf.get('app:base_path')}/chatbot`,
     platform_feature_flags: [
       { id: 'RUNTIME_SORTING', enable: isRuntimeSortEnable() },
       ...(ENABLED_FEATURE_FLAGS.map((feature) => ({ id: feature, enable: true }))),

@@ -32,7 +32,7 @@ import initTaxiiApi from './httpTaxii';
 import initHttpRollingFeeds from './httpRollingFeed';
 import { createAuthenticatedContext } from './httpAuthenticatedContext';
 import { setCookieError } from './httpUtils';
-import { getChatbotProxy } from './httpChatbotProxy';
+import { getChatbotProxy, getChatbotHealthCheck } from './httpChatbotProxy';
 import { isStrategyActivated, StrategyType } from '../config/providers-configuration';
 
 export const sanitizeReferer = (refererToSanitize) => {
@@ -553,7 +553,8 @@ const createApp = async (app, schema) => {
     }
   });
 
-  // -- Chatbot Proxy
+  // -- Chatbot Proxy (FORK: rewritten to call Claude API directly)
+  app.get(`${basePath}/chatbot`, getChatbotHealthCheck);
   app.post(`${basePath}/chatbot`, getChatbotProxy);
 
   // Other routes - Render index.html
