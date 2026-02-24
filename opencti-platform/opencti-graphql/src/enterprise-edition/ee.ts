@@ -5,17 +5,15 @@ import { SYSTEM_USER } from '../utils/access';
 import { ENTITY_TYPE_SETTINGS } from '../schema/internalObject';
 import { UnsupportedError } from '../config/errors';
 
-export const isEnterpriseEdition = async (context: AuthContext) => {
-  const settings = await getEntityFromCache<BasicStoreSettings>(context, SYSTEM_USER, ENTITY_TYPE_SETTINGS);
-  return isEnterpriseEditionFromSettings(settings);
+// FORK: EE bypass for local testing — all features unlocked
+export const isEnterpriseEdition = async (_context: AuthContext) => {
+  return true;
 };
 
-export const isEnterpriseEditionFromSettings = (settings?: Pick<BasicStoreSettings, 'valid_enterprise_edition'>): boolean => {
-  return settings?.valid_enterprise_edition === true;
+export const isEnterpriseEditionFromSettings = (_settings?: Pick<BasicStoreSettings, 'valid_enterprise_edition'>): boolean => {
+  return true;
 };
 
-export const checkEnterpriseEdition = async (context: AuthContext) => {
-  if (!(await isEnterpriseEdition(context))) {
-    throw UnsupportedError('Enterprise edition is not enabled');
-  }
+export const checkEnterpriseEdition = async (_context: AuthContext) => {
+  // no-op: EE always enabled
 };

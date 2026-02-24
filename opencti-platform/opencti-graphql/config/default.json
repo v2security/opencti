@@ -212,6 +212,11 @@
     "ai_azure_deployment": "",
     "timeout": 60000
   },
+  "chatbot": {
+    "api_key": "",
+    "model": "claude-sonnet-4-5-20250929",
+    "max_tokens": 4096
+  },
   "xtm": {
     "xtm_one_url": "https://common.xtm1.filigran.io",
     "openaev_url": "",

@@ -15,9 +15,9 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
 import useAuth from './useAuth';
 
+// FORK: EE bypass for local testing — all features unlocked
 const useEnterpriseEdition = (): boolean => {
-  const { settings } = useAuth();
-  return settings.platform_enterprise_edition?.license_validated;
+  return true;
 };
 
 export default useEnterpriseEdition;
