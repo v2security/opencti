@@ -21,3 +21,5 @@ opencti-platform/opencti-graphql/.yarnrc.yml
 .venv
 venv
 /licenses/
+
+.env
