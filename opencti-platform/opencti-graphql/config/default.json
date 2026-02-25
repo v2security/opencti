@@ -200,10 +200,11 @@
     }
   },
   "ai": {
-    "type": "mistralai",
+    "enabled": true,
+    "type": "anthropic",
     "endpoint": "",
     "token": "",
-    "model": "",
+    "model": "claude-sonnet-4-5-20250929",
     "version": "",
     "model_images": "",
     "max_tokens": 30000,

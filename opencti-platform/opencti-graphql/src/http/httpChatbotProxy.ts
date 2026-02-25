@@ -17,6 +17,9 @@ const CHATBOT_MODEL: string = nconf.get('chatbot:model') ?? 'claude-sonnet-4-5-2
 const CHATBOT_MAX_TOKENS: number = Number(nconf.get('chatbot:max_tokens') ?? 4096);
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
+// Export for compatibility with settings.js (not actually used since we call Claude directly)
+export const XTM_ONE_CHATBOT_URL = 'anthropic://local'; // Placeholder – chatbot runs locally via Anthropic API
+
 const SYSTEM_PROMPT = `You are Ariane, an expert AI assistant specialized in Cyber Threat Intelligence (CTI).
 You run inside an OpenCTI platform instance. Your purpose is to help analysts with:
 - Understanding threat actors, malware, campaigns, and attack patterns

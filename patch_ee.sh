@@ -72,6 +72,28 @@ for f in "${EE_TS}" "${LICENSING_TS}"; do
 done
 echo ""
 
+# ===== Step 2b: Copy custom files (AI Anthropic support, Chatbot) =====
+echo "[2b/6] Copying custom files (Anthropic AI support, Chatbot)..."
+
+CUSTOM_FILES=(
+  "opencti-platform/opencti-graphql/src/database/ai-llm.ts"
+  "opencti-platform/opencti-graphql/src/http/httpChatbotProxy.ts"
+  "opencti-platform/opencti-graphql/package.json"
+  "opencti-platform/opencti-graphql/config/default.json"
+)
+
+for f in "${CUSTOM_FILES[@]}"; do
+  SRC="${SCRIPT_DIR}/${f}"
+  DST="${SOURCE_DIR}/${f}"
+  if [ -f "$SRC" ]; then
+    cp -f "$SRC" "$DST"
+    echo "  ✓ Copied: ${f}"
+  else
+    echo "  ⚠️ Not found (skipped): ${f}"
+  fi
+done
+echo ""
+
 # ===== Step 3: Apply patches =====
 echo "[3/6] Applying EE bypass patches..."
 

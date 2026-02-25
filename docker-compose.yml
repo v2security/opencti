@@ -151,15 +151,19 @@ services:
       - SMTP__PORT=25
       - PROVIDERS__LOCAL__STRATEGY=LocalStrategy
       - APP__HEALTH_ACCESS_KEY=${OPENCTI_HEALTHCHECK_ACCESS_KEY}
-      # AI Configuration - Enable all AI features
+      # AI Configuration - Anthropic Claude (dùng chung cho tất cả AI features)
       - AI__ENABLED=true
-      - AI__TYPE=${AI_TYPE}
-      - AI__ENDPOINT=${AI_ENDPOINT}
-      - AI__TOKEN=${AI_TOKEN}
-      - AI__MODEL=${AI_MODEL}
-      - AI__MODEL_IMAGES=${AI_MODEL_IMAGES}
-      - AI__MAX_TOKENS=${AI_MAX_TOKENS}
-      - AI__TIMEOUT=${AI_TIMEOUT}
+      - AI__TYPE=anthropic
+      - AI__ENDPOINT=
+      - AI__TOKEN=${ANTHROPIC_API_KEY}
+      - AI__MODEL=${ANTHROPIC_MODEL}
+      - AI__MODEL_IMAGES=
+      - AI__MAX_TOKENS=30000
+      - AI__TIMEOUT=60000
+      # Chatbot (Ask Ariane) - Anthropic Claude API
+      - CHATBOT__API_KEY=${ANTHROPIC_API_KEY}
+      - CHATBOT__MODEL=${ANTHROPIC_MODEL}
+      - CHATBOT__MAX_TOKENS=4096
     ports:
       - "${OPENCTI_PORT}:8080"
     depends_on:
