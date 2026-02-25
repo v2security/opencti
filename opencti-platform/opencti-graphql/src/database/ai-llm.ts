@@ -1,4 +1,3 @@
-import { zodToJsonSchema } from 'zod-to-json-schema';
 import { ChatAnthropic } from '@langchain/anthropic';
 import type { ChatPromptValueInterface } from '@langchain/core/prompt_values';
 import { ChatMistralAI } from '@langchain/mistralai';
@@ -41,14 +40,24 @@ if (AI_ENABLED && AI_TOKEN) {
     case 'anthropic': { // FORK: Anthropic/Claude support via @langchain/anthropic
       anthropicEnabled = true;
       const anthropicModel = AI_MODEL || 'claude-sonnet-4-5-20250929';
-      nlqChat = new ChatAnthropic({
+      const anthropicChat = new ChatAnthropic({
         model: anthropicModel,
         apiKey: AI_TOKEN,
         temperature: 0,
-        topP: undefined, // FORK: Explicitly undefined to prevent @langchain/anthropic from sending -1
         maxTokens: 4096,
         ...(isEmptyField(AI_ENDPOINT) ? {} : { anthropicApiUrl: AI_ENDPOINT }),
       });
+      // FORK: Monkey-patch to remove top_p from API params.
+      // @langchain/anthropic defaults top_p to -1 which Anthropic API rejects.
+      // Also can't send both temperature and top_p together.
+      const originalInvocationParams = anthropicChat.invocationParams.bind(anthropicChat);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      anthropicChat.invocationParams = function (options: any) {
+        const params = originalInvocationParams(options);
+        delete params.top_p;
+        return params;
+      };
+      nlqChat = anthropicChat;
       break;
     }
 
@@ -304,7 +313,7 @@ export const queryNLQAi = async (promptValue: ChatPromptValueInterface) => {
     endpoint: AI_ENDPOINT,
     model: AI_MODEL,
   });
-  if (!nlqChat && AI_TYPE !== 'anthropic') {
+  if (!nlqChat) {
     throw badAiConfigError;
   }
 
@@ -312,78 +321,35 @@ export const queryNLQAi = async (promptValue: ChatPromptValueInterface) => {
 
   logApp.info('[NLQ] Querying AI model for structured output');
   try {
-    // FORK: Handle Anthropic separately using raw API with tool calling
-    // @langchain/anthropic has issues with topP: -1 default, so we bypass it entirely
+    // FORK: Anthropic needs bindTools (no strict Zod validation) because
+    // the model sometimes returns nested objects as JSON strings, which
+    // withStructuredOutput's parser rejects. Only ~10 lines vs 60 with raw fetch.
     if (AI_TYPE === 'anthropic') {
-      if (!AI_TOKEN) throw badAiConfigError;
-      
-      // Convert Zod schema to JSON Schema for Anthropic tool
-      // Extract only the schema definition, ensuring it has 'type' at root level
-      const fullSchema = zodToJsonSchema(OutputSchema, 'OutputSchema');
-      // Get the actual schema definition (may be nested under definitions or $defs)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const schemaDefinitions = (fullSchema as any).definitions || (fullSchema as any).$defs;
+      const chat = nlqChat as any;
+      const bound = chat.bindTools(
+        [{ name: 'nlq_output', schema: OutputSchema, description: 'Build a structured OpenCTI query' }],
+        { tool_choice: { type: 'tool', name: 'nlq_output' } }
+      );
+      const msg = await bound.invoke(promptValue);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let jsonSchema: any = schemaDefinitions?.OutputSchema || fullSchema;
-      // Ensure type is at root level for Anthropic
-      if (!jsonSchema.type) {
-        jsonSchema = { type: 'object', ...jsonSchema };
+      const args = msg.tool_calls?.[0]?.args ?? {} as any;
+      // Fix: Anthropic sometimes nests {filters: {mode, filters: [...]}} instead of {mode, filters: [...]}
+      if (args.filters && !Array.isArray(args.filters)) {
+        const nested = typeof args.filters === 'string' ? JSON.parse(args.filters) : args.filters;
+        if (nested.filters && Array.isArray(nested.filters)) {
+          args.mode = nested.mode || args.mode;
+          args.filters = nested.filters;
+        }
       }
-      
-      // Extract messages from prompt value
-      const messages = await promptValue.toChatMessages();
-      const anthropicMessages = messages.map((msg) => ({
-        role: msg._getType() === 'human' ? 'user' : 'assistant',
-        content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-      }));
-      
-      // Extract system message if present
-      const systemMsg = messages.find((m) => m._getType() === 'system');
-      const systemContent = systemMsg ? (typeof systemMsg.content === 'string' ? systemMsg.content : JSON.stringify(systemMsg.content)) : undefined;
-      const userMessages = anthropicMessages.filter((m) => m.role !== 'system');
-      
-      const model = AI_MODEL || ANTHROPIC_DEFAULT_MODEL;
-      const response = await fetch(AI_ENDPOINT || ANTHROPIC_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': AI_TOKEN,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: 4096,
-          temperature: 0,
-          ...(systemContent ? { system: systemContent } : {}),
-          messages: userMessages,
-          tools: [{
-            name: 'nlq_query_builder',
-            description: 'Build a structured OpenCTI query based on user natural language input. Return filters as an array of filter objects, NOT as a string.',
-            input_schema: jsonSchema,
-          }],
-          tool_choice: { type: 'tool', name: 'nlq_query_builder' },
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        logApp.error('[NLQ] Anthropic API error', { status: response.status, error: errorText });
-        throw UnknownError(`Anthropic API error: ${response.status}`, { error: errorText });
-      }
-      
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result: any = await response.json();
-      // Extract tool use result from response
-      const toolUseBlock = result.content?.find((block: { type: string }) => block.type === 'tool_use');
-      if (toolUseBlock && toolUseBlock.input) {
-        return toolUseBlock.input as Output;
-      }
-      
-      throw UnknownError('No tool use response from Anthropic', { result });
+      delete args.filterGroups; // Remove extra fields not in OutputSchema
+      return args as Output;
     }
-    // Cast to ChatOpenAI to resolve union type incompatibility with withStructuredOutput overloads
-    const chat = nlqChat as ChatOpenAI;
-    return await chat.withStructuredOutput<Output>(OutputSchema).invoke(promptValue);
+    // Other models (OpenAI, MistralAI, AzureOpenAI): use withStructuredOutput with Zod validation
+    // FORK: Cast to any to resolve union type incompatibility with withStructuredOutput overloads
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const chat = nlqChat as any;
+    return await chat.withStructuredOutput(OutputSchema).invoke(promptValue) as Output;
   } catch (err) {
     logApp.error('[NLQ] Error in queryNLQAi', { cause: err, aiType: AI_TYPE });
     if (err instanceof AuthenticationError) {

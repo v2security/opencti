@@ -17,8 +17,11 @@ export
 # Default version (fallback)
 VERSION ?= $(OPENCTI_VERSION)
 
-.PHONY: help upgrade patch build up down restart status logs logs-opencti \
+.PHONY: prune help upgrade patch build up down restart status logs logs-opencti \
         logs-worker ps clean version start stop
+
+prune:
+	docker image prune -a -f
 
 ## ─────────────────────────────────────────
 ## 📋 HELP

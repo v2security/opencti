@@ -124,6 +124,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.patch
+      args:
+        OPENCTI_VERSION: ${OPENCTI_VERSION}
     image: opencti/platform:${OPENCTI_VERSION}-patched
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
