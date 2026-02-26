@@ -342,6 +342,95 @@ services:
     depends_on:
       opencti:
         condition: service_healthy              
+
+  ###########################
+  # OPENCTI ADDITIONAL      #
+  ###########################
+
+  # docker compose down connector-alienvault
+  # docker compose up -d connector-alienvault
+  connector-alienvault:
+    image: opencti/connector-alienvault:${OPENCTI_VERSION}
+    container_name: connector-alienvault
+    environment:
+      # ===== OpenCTI Core =====
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+
+      # ===== Connector Config =====
+      - CONNECTOR_ID=${CONNECTOR_OTX_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=AlienVault OTX
+      - CONNECTOR_SCOPE=alienvault
+      - CONNECTOR_LOG_LEVEL=info
+
+      # ===== OTX Config =====
+      - ALIENVAULT_BASE_URL=https://otx.alienvault.com
+      - ALIENVAULT_API_KEY=${OTX_API_KEY}
+      - ALIENVAULT_TLP=White
+      - ALIENVAULT_CREATE_OBSERVABLES=true
+      - ALIENVAULT_CREATE_INDICATORS=true
+      - ALIENVAULT_ENABLE_RELATIONSHIPS=true
+      - ALIENVAULT_ENABLE_ATTACK_PATTERNS_INDICATES=true
+      - ALIENVAULT_DEFAULT_X_OPENCTI_SCORE=50
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy    
+
+
+  # docker compose down connector-cve
+  # docker compose up -d connector-cve
+  connector-cve:
+    image: opencti/connector-cve:${OPENCTI_VERSION}
+    container_name: connector-cve
+    environment:
+      # ===== OpenCTI Core =====
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+
+      # ===== Connector Config =====
+      - CONNECTOR_ID=${CONNECTOR_CVE_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=NVD CVE
+      - CONNECTOR_SCOPE=cve
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=PT1H
+
+      # ===== NVD / CVE Config =====
+      - CVE_API_KEY=${NVD_API_KEY}
+      - CVE_START_YEAR=2024
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
+  # docker compose down connector-shodan
+  # docker compose up -d connector-shodan
+  connector-shodan:
+    image: opencti/connector-shodan:${OPENCTI_VERSION}
+    container_name: connector-shodan
+    environment:
+      # ===== OpenCTI Core =====
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+
+      # ===== Connector =====
+      - CONNECTOR_ID=${CONNECTOR_SHODAN_ID}
+      - CONNECTOR_TYPE=INTERNAL_ENRICHMENT
+      - CONNECTOR_NAME=Shodan
+      - CONNECTOR_SCOPE=ipv4-addr
+      - CONNECTOR_LOG_LEVEL=info
+
+      # ===== Shodan =====
+      - SHODAN_TOKEN=${SHODAN_API_KEY}
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
+  # docker compose down connector-misp-feed
+  # docker compose up -d connector-misp-feed
   connector-misp-feed:
     image: opencti/connector-misp-feed:${OPENCTI_VERSION}
     container_name: connector-misp-feed
@@ -354,6 +443,15 @@ services:
       - CONNECTOR_SCOPE=misp-feed
       - CONNECTOR_LOG_LEVEL=info
       - MISP_FEED_URL=https://www.circl.lu/doc/misp/feed-osint
+      - MISP_FEED_SSL_VERIFY=true
+      - MISP_FEED_IMPORT_FROM_DATE=2024-01-01
+      - MISP_FEED_CREATE_REPORTS=true
+      - MISP_FEED_REPORT_TYPE=misp-event
+      - MISP_FEED_CREATE_INDICATORS=true
+      - MISP_FEED_CREATE_OBSERVABLES=true
+      - MISP_FEED_CREATE_OBJECT_OBSERVABLES=true
+      - MISP_FEED_IMPORT_WITH_ATTACHMENTS=true
+      - MISP_FEED_IMPORT_UNSUPPORTED_OBSERVABLES_AS_TEXT=false
       - CONNECTOR_DURATION_PERIOD=1d
     restart: always
     depends_on:

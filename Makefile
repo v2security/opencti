@@ -18,7 +18,7 @@ export
 VERSION ?= $(OPENCTI_VERSION)
 
 .PHONY: prune help upgrade patch patch-check patch-revert build up down restart status logs logs-opencti \
-        logs-worker ps clean version start stop
+        logs-worker ps clean clean-all destroy version info start stop
 
 prune:
 	docker image prune -a -f
@@ -128,6 +128,15 @@ clean-all: ## Xóa tất cả custom images cũ
 	@docker images | grep -E 'patched|custom' | awk '{print $$3}' | xargs -r docker rmi -f 2>/dev/null || true
 	@echo "Done."
 
+destroy: ## Stop containers + xóa TẤT CẢ volumes (⚠️  MẤT DỮ LIỆU!)
+	@echo ""
+	@echo "⚠️  CẢNH BÁO: Lệnh này sẽ XÓA toàn bộ dữ liệu (ES, Redis, MinIO, RabbitMQ, RSA keys)!"
+	@echo ""
+	@read -p "Bạn có chắc chắn? (y/N): " confirm && [ "$$confirm" = "y" ] || { echo "Đã hủy."; exit 1; }
+	@echo "🗑️  Stopping containers và xóa volumes..."
+	docker compose down -v
+	@echo "✅ Đã xóa tất cả containers và volumes."
+
 ## ─────────────────────────────────────────
 ## ℹ️  INFO
 ## ─────────────────────────────────────────
@@ -148,5 +157,3 @@ info: ## Hiển thị thông tin chi tiết
 	@echo "AI Model    : $(AI_MODEL)"
 	@echo "─────────────────────────────────────────"
 	@echo ""
-
-.PHONY: start stop restart
