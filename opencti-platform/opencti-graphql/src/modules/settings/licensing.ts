@@ -133,21 +133,21 @@ export const decodeLicensePem = (settings: BasicStoreSettings, overridePem?: str
   }
   return {
     license_enterprise,
-    license_validated: false,
+    license_validated: true,
     license_by_configuration: licenseByConfiguration,
-    license_valid_cert: false,
+    license_valid_cert: true,
     license_extra_expiration: false,
     license_extra_expiration_days: 0,
     license_customer: 'invalid',
-    license_expired: true,
+    license_expired: false,
     license_expiration_date: currentDate,
     license_start_date: currentDate,
     license_platform: 'invalid',
-    license_type: 'trial',
+    license_type: 'standard',
     license_expiration_prevention: false,
     license_platform_match: true,
     license_creator: 'Unknown',
-    license_global: false,
+    license_global: true,
   };
 };
 

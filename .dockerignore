@@ -8,10 +8,8 @@
 .patch-backup
 opencti-source
 **/node_modules
-**/.yarn
 **/dist
 **/coverage
-**/build
 **/__generated__*
 
 # Documentation & non-essential
@@ -27,17 +25,20 @@ LICENSE
 renovate.json5
 generatelicenseconfig.json
 
-# Frontend (built separately in official image)
-opencti-platform/opencti-front
+# Dev / không cần cho build
 opencti-platform/opencti-dev
 opencti-platform/opencti-tauri
 opencti-platform/Dockerfile*
 opencti-platform/.dockerignore
 
-# GraphQL dev configs
+# GraphQL dev configs & tests
 opencti-platform/opencti-graphql/config/development.json
 opencti-platform/opencti-graphql/config/production.json
 opencti-platform/opencti-graphql/config/local.json
 opencti-platform/opencti-graphql/logs
 opencti-platform/opencti-graphql/tests
 opencti-platform/opencti-graphql/coverage
+
+# Frontend tests & e2e
+opencti-platform/opencti-front/tests_e2e
+opencti-platform/opencti-front/coverage

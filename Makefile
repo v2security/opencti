@@ -17,7 +17,7 @@ export
 # Default version (fallback)
 VERSION ?= $(OPENCTI_VERSION)
 
-.PHONY: prune help upgrade patch build up down restart status logs logs-opencti \
+.PHONY: prune help upgrade patch patch-check patch-revert build up down restart status logs logs-opencti \
         logs-worker ps clean version start stop
 
 prune:
@@ -42,27 +42,28 @@ help: ## Hiển thị danh sách commands
 ## 🚀 UPGRADE (patch + build + restart)
 ## ─────────────────────────────────────────
 
-upgrade: ## Nâng cấp version: make upgrade VERSION=6.10.0
-	@echo "🚀 Upgrading OpenCTI to version $(VERSION)..."
-	@echo ""
-	./patch_ee.sh $(VERSION)
-	@echo ""
-	@echo "🔄 Restarting containers..."
+upgrade: ## Nâng cấp: patch source → build image → restart
+	@echo "🚀 Upgrading OpenCTI..."
+	./patch_ee.sh
+	docker compose build opencti
 	docker compose down
 	docker compose up -d
-	@echo ""
-	@echo "✅ Upgrade to $(VERSION) complete!"
-	@echo "   Run 'make status' to check health"
-	@echo "   Run 'make logs' to view startup logs"
+	@echo "✅ Done! Run 'make logs' to check"
 
 ## ─────────────────────────────────────────
-## 🔧 BUILD & PATCH (chỉ build, không restart)
+## 🔧 PATCH & BUILD (từng bước)
 ## ─────────────────────────────────────────
 
-patch: ## Chỉ patch + build image (không restart): make patch VERSION=6.10.0
-	./patch_ee.sh $(VERSION)
+patch: ## Patch EE trên source code (sed trực tiếp)
+	./patch_ee.sh
 
-build: ## Build lại image từ source đã patch
+patch-check: ## Kiểm tra source đã patch chưa
+	./patch_ee.sh --check
+
+patch-revert: ## Revert source về git HEAD
+	./patch_ee.sh --revert
+
+build: ## Build Docker image từ source (đã patch)
 	docker compose build opencti
 
 ## ─────────────────────────────────────────
@@ -122,9 +123,9 @@ clean: ## Xóa dangling images và build cache
 	docker image prune -f
 	docker builder prune -f
 
-clean-all: ## Xóa tất cả images patched cũ
-	@echo "Removing old patched images..."
-	@docker images | grep 'patched' | awk '{print $$3}' | xargs -r docker rmi -f 2>/dev/null || true
+clean-all: ## Xóa tất cả custom images cũ
+	@echo "Removing old custom images..."
+	@docker images | grep -E 'patched|custom' | awk '{print $$3}' | xargs -r docker rmi -f 2>/dev/null || true
 	@echo "Done."
 
 ## ─────────────────────────────────────────
@@ -133,7 +134,7 @@ clean-all: ## Xóa tất cả images patched cũ
 
 version: ## Hiển thị version hiện tại
 	@echo "OPENCTI_VERSION=$(OPENCTI_VERSION)"
-	@echo "Image: opencti/platform:$(OPENCTI_VERSION)-patched"
+	@echo "Image: opencti/platform:$(OPENCTI_VERSION)-custom"
 
 info: ## Hiển thị thông tin chi tiết
 	@echo ""
