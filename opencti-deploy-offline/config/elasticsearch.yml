@@ -1,0 +1,26 @@
+# ═══════════════════════════════════════════════════════════════
+# Elasticsearch 8.x — Cấu hình cho OpenCTI offline deployment
+# Deploy to: /opt/elasticsearch/config/elasticsearch.yml
+# ═══════════════════════════════════════════════════════════════
+
+cluster.name: opencti
+node.name: node-1
+
+path.data: /opt/elasticsearch/data
+path.logs: /opt/elasticsearch/logs
+
+network.host: 0.0.0.0
+http.port: 9200
+
+# Single-node — không cần discovery
+discovery.type: single-node
+
+# Tắt security (internal network, không expose ra ngoài)
+xpack.security.enabled: false
+xpack.security.enrollment.enabled: false
+
+# Tắt ML (tiết kiệm RAM)
+xpack.ml.enabled: false
+
+# Tắt geoip downloader (offline)
+ingest.geoip.downloader.enabled: false

@@ -28,3 +28,7 @@ venv
 opencti-source/
 .patch-backup/
 Dockerfile.patch
+opencti-deploy-offline/rpm
+opencti-deploy-offline/files
+opencti-deploy-offline/output
+opencti-deploy-offline/opencti-offline-deploy.tar.gz

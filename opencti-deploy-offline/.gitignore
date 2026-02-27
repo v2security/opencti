@@ -1,0 +1,8 @@
+# Build output
+output/
+
+# SSL certificates (contain private keys — NEVER commit)
+cert/
+
+# Offline deploy archive
+opencti-offline-deploy.tar.gz

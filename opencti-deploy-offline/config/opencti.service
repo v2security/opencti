@@ -1,0 +1,19 @@
+[Unit]
+Description=OpenCTI Platform
+After=network.target redis.service rabbitmq-server.service minio.service
+
+[Service]
+Type=simple
+# Chạy bằng root
+User=root
+Group=root
+WorkingDirectory=/opt/opencti
+ExecStart=/opt/opencti/start.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=opencti
+
+[Install]
+WantedBy=multi-user.target
