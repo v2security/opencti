@@ -5,7 +5,7 @@
 ### Backend (Tú + Kiên + Quyết):
 + Hoàn thiện và phát triển các connector vào TI Server - IOC
 + Thiết kế + phát triển: Cơ sở dữ liệu để lưu trữ dữ liệu (hiện trạng đang như nào)
-+ Thiết kế + phát triển: Module chia sẻ dữ liệu từ TI Server về TI Client
++ Thiết kế + phát triển: Module chia sẻ dữ liệu từ OpenCTI Server về OpenCTI Client
 + Đóng gói sản phẩm TI: Cài đặt bên server cho khách hàng (không docker)
 
 ### Frontend (Bách + a.Hoàng):
