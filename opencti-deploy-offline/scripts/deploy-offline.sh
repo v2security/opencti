@@ -26,8 +26,7 @@
 # │ config/minio.service                        │ /etc/systemd/system/minio.service                │
 # │ config/start.sh                             │ /opt/opencti/start.sh                            │
 # │ config/opencti.service                      │ /etc/systemd/system/opencti.service              │
-# │ config/opencti-worker@.service              │ /etc/systemd/system/opencti-worker@.service      │
-# └─────────────────────────────────────────────┴──────────────────────────────────────────────────┘
+# │ config/opencti-worker@.service              │ /etc/systemd/system/opencti-worker@.service      │# │ config/opencti-logrotate.conf               │ /etc/logrotate.d/opencti                   │# └─────────────────────────────────────────────┴──────────────────────────────────────────────────┘
 #
 # File layout sau khi deploy:
 #   /opt/python312/          ← Python 3.12.8 (compiled, --enable-shared, libpython3.12.so)
@@ -36,6 +35,8 @@
 #   /opt/minio/              ← MinIO server (user: root)
 #   /opt/opencti/            ← OpenCTI Platform (user: root)
 #   /opt/opencti-worker/     ← OpenCTI Worker x3 (user: root)
+#   /var/log/v2-ti/opencti/        ← Platform logs (logrotate daily, 30 ngày)
+#   /var/log/v2-ti/opencti-worker/ ← Worker logs (logrotate daily, 30 ngày)
 #
 # =============================================================================
 set -e
@@ -363,6 +364,12 @@ chmod 644 "$SSL_CRT_PATH"
 detail "SSL permissions: dir=700, key=600, cert=644"
 detail "Copy: config/opencti.service → /etc/systemd/system/"
 cp "$DEPLOY_DIR"/config/opencti.service /etc/systemd/system/
+detail "Tạo thư mục log: /var/log/v2-ti/opencti/, /var/log/v2-ti/opencti-worker/"
+mkdir -p /var/log/v2-ti/opencti /var/log/v2-ti/opencti-worker
+chmod 755 /var/log/v2-ti/opencti /var/log/v2-ti/opencti-worker
+detail "Copy: config/opencti-logrotate.conf → /etc/logrotate.d/opencti"
+cp "$DEPLOY_DIR"/config/opencti-logrotate.conf /etc/logrotate.d/opencti
+ok "Log directories + logrotate configured"
 detail "Create Python venv → /opt/opencti/.python-venv (dùng Python 3.12)"
 if [[ ! -d /opt/opencti/.python-venv ]]; then
   /opt/python312/bin/python3.12 -m venv /opt/opencti/.python-venv
@@ -483,6 +490,12 @@ echo "    /opt/opencti/ssl/            SSL certificates"
 echo "    /opt/opencti-worker/         Worker x$WORKERS (user: root)"
 echo "    /opt/opencti-worker/venv/    Worker Python venv"
 echo ""
+echo "  📝 Log Files:"
+echo "    /var/log/v2-ti/opencti/opencti.log          Platform stdout"
+echo "    /var/log/v2-ti/opencti/opencti-error.log    Platform stderr"
+echo "    /var/log/v2-ti/opencti-worker/worker-N.log  Worker stdout (N=1..$WORKERS)"
+echo "    /var/log/v2-ti/opencti-worker/worker-N-error.log  Worker stderr"
+echo ""
 echo "  🔧 Service Users:"
 echo "    elasticsearch                user: elasticsearch (ES bắt buộc)"
 echo "    redis, rabbitmq, minio       user: root"
@@ -493,7 +506,9 @@ echo "  👤 User: ${APP__ADMIN__EMAIL}"
 echo "  🔑 Pass: ${APP__ADMIN__PASSWORD}"
 echo ""
 echo "  📋 Commands:"
-echo "    journalctl -u opencti -f         # Platform logs"
-echo "    journalctl -u opencti-worker@1 -f  # Worker logs"
-echo "    systemctl status opencti         # Platform status"
+echo "    tail -f /var/log/v2-ti/opencti/opencti.log           # Platform logs"
+echo "    tail -f /var/log/v2-ti/opencti/opencti-error.log     # Platform error logs"
+echo "    tail -f /var/log/v2-ti/opencti-worker/worker-1.log   # Worker 1 logs"
+echo "    systemctl status opencti                       # Platform status"
+echo "    systemctl status opencti-worker@1              # Worker 1 status"
 echo ""

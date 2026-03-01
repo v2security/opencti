@@ -37,10 +37,10 @@ services:
       - opt-data:/opt                    # ES, RabbitMQ, MinIO, OpenCTI, Python, Worker
       - var-data:/var                    # Redis data, RabbitMQ mnesia, MinIO data
     ports:
-      - "8443:8443"                      # OpenCTI HTTPS
-      - "9200:9200"                      # Elasticsearch
-      - "15672:15672"                    # RabbitMQ Management
-      - "9001:9001"                      # MinIO Console
+      - "18443:8443"                      # OpenCTI HTTPS
+      - "19200:9200"                      # Elasticsearch
+      - "25672:15672"                     # RabbitMQ Management
+      - "19001:9001"                      # MinIO Console
     environment:
       - container=docker
     mem_limit: 12g

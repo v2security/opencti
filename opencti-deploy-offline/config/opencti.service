@@ -11,8 +11,8 @@ WorkingDirectory=/opt/opencti
 ExecStart=/opt/opencti/start.sh
 Restart=always
 RestartSec=10
-StandardOutput=journal
-StandardError=journal
+StandardOutput=append:/var/log/v2-ti/opencti/opencti.log
+StandardError=append:/var/log/v2-ti/opencti/opencti-error.log
 SyslogIdentifier=opencti
 
 [Install]
