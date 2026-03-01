@@ -46,6 +46,10 @@ RUN dnf install -y --allowerasing \
         which \
         vim-minimal \
         curl \
+        wget \
+        tree \
+        telnet \
+        nmap-ncat \
         findutils \
         && dnf clean all
 
