@@ -68,6 +68,55 @@ opencti-deploy-offline/
     └── uninstall-opencti.sh     # Gỡ cài đặt
 ```
 
+## Directory Layout trên máy đích
+
+```
+/opt/                           # CODE — binaries & application
+├── python312/                  Python 3.12.8 (compiled, --enable-shared)
+├── elasticsearch/              Elasticsearch 8.17.0 binaries
+├── rabbitmq/                   RabbitMQ 4.1.0 binaries
+├── minio/bin/                  MinIO server binary
+├── opencti/                    OpenCTI Platform (Node.js)
+│   ├── build/
+│   ├── node_modules/
+│   ├── public/
+│   ├── src/
+│   └── .python-venv/
+└── opencti-worker/             OpenCTI Worker (Python)
+    ├── worker.py
+    ├── venv/
+    └── wheels/
+
+/etc/                           # CONFIG — configuration files
+├── opencti/
+│   ├── start.sh                Platform startup script
+│   └── ssl/
+│       ├── opencti.key
+│       └── opencti.crt
+├── opencti-worker/
+│   ├── config.yml              Worker config
+│   └── worker.env              Worker environment vars
+├── elasticsearch/
+│   ├── elasticsearch.yml
+│   └── jvm.options.d/
+├── rabbitmq/
+│   └── rabbitmq.conf
+├── default/minio               MinIO env config
+└── redis/redis.conf
+
+/var/lib/                       # DATA — persistent data
+├── elasticsearch/              Elasticsearch indices
+├── minio/data/                 MinIO object storage
+├── rabbitmq/mnesia/            RabbitMQ data
+└── redis/                      Redis data
+
+/var/log/v2-ti/                 # LOGS — all application logs
+├── opencti/                    Platform stdout/stderr
+├── opencti-worker/             Worker stdout/stderr
+├── elasticsearch/              Elasticsearch logs
+└── rabbitmq/                   RabbitMQ logs
+```
+
 ## Yêu cầu
 
 - **Máy build**: Docker, Git, ~5GB disk

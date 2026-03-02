@@ -1,13 +1,13 @@
 # ═══════════════════════════════════════════════════════════════
 # Elasticsearch 8.x — Cấu hình cho OpenCTI offline deployment
-# Deploy to: /opt/elasticsearch/config/elasticsearch.yml
+# Deploy to: /etc/elasticsearch/elasticsearch.yml
 # ═══════════════════════════════════════════════════════════════
 
 cluster.name: opencti
 node.name: node-1
 
-path.data: /opt/elasticsearch/data
-path.logs: /opt/elasticsearch/logs
+path.data: /var/lib/elasticsearch
+path.logs: /var/log/v2-ti/elasticsearch
 
 network.host: 0.0.0.0
 http.port: 9200

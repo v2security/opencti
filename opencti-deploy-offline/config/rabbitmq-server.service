@@ -12,7 +12,7 @@ User=root
 Group=root
 
 Environment=RABBITMQ_BASE=/opt/rabbitmq
-Environment=RABBITMQ_LOG_BASE=/var/log/rabbitmq
+Environment=RABBITMQ_LOG_BASE=/var/log/v2-ti/rabbitmq
 Environment=RABBITMQ_MNESIA_BASE=/var/lib/rabbitmq/mnesia
 Environment=RABBITMQ_CONFIG_FILE=/etc/rabbitmq/rabbitmq
 Environment=RABBITMQ_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf

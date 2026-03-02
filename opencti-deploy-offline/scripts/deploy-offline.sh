@@ -18,25 +18,34 @@
 # │ files/opencti-worker.tar.gz                 │ /opt/opencti-worker/                             │
 # │ rpm/*.rpm                                   │ system packages (dnf localinstall)               │
 # ├─────────────────────────────────────────────┼──────────────────────────────────────────────────┤
-# │ config/elasticsearch.yml                    │ /opt/elasticsearch/config/elasticsearch.yml      │
-# │ config/elasticsearch-jvm.options            │ /opt/elasticsearch/config/jvm.options.d/         │
+# │ config/elasticsearch.yml                    │ /etc/elasticsearch/elasticsearch.yml             │
+# │ config/elasticsearch-jvm.options            │ /etc/elasticsearch/jvm.options.d/opencti.options  │
 # │ config/elasticsearch.service                │ /etc/systemd/system/elasticsearch.service        │
 # │ config/rabbitmq-server.service              │ /etc/systemd/system/rabbitmq-server.service      │
 # │ config/90-opencti.conf                      │ /etc/rabbitmq/rabbitmq.conf                      │
 # │ config/minio.service                        │ /etc/systemd/system/minio.service                │
-# │ config/start.sh                             │ /opt/opencti/start.sh                            │
+# │ config/start.sh                             │ /etc/opencti/start.sh                            │
 # │ config/opencti.service                      │ /etc/systemd/system/opencti.service              │
-# │ config/opencti-worker@.service              │ /etc/systemd/system/opencti-worker@.service      │# │ config/opencti-logrotate.conf               │ /etc/logrotate.d/opencti                   │# └─────────────────────────────────────────────┴──────────────────────────────────────────────────┘
+# │ config/opencti-worker@.service              │ /etc/systemd/system/opencti-worker@.service      │
+# │ config/opencti-logrotate.conf               │ /etc/logrotate.d/opencti                         │
+# └─────────────────────────────────────────────┴──────────────────────────────────────────────────┘
 #
 # File layout sau khi deploy:
-#   /opt/python312/          ← Python 3.12.8 (compiled, --enable-shared, libpython3.12.so)
-#   /opt/elasticsearch/      ← Elasticsearch 8.17.0 (user: elasticsearch)
-#   /opt/rabbitmq/           ← RabbitMQ 4.1.0 (user: root)
-#   /opt/minio/              ← MinIO server (user: root)
-#   /opt/opencti/            ← OpenCTI Platform (user: root)
-#   /opt/opencti-worker/     ← OpenCTI Worker x3 (user: root)
-#   /var/log/v2-ti/opencti/        ← Platform logs (logrotate daily, 30 ngày)
-#   /var/log/v2-ti/opencti-worker/ ← Worker logs (logrotate daily, 30 ngày)
+#   /opt/python312/                  ← Python 3.12.8 (compiled, --enable-shared, libpython3.12.so)
+#   /opt/elasticsearch/              ← Elasticsearch 8.17.0 binaries (user: elasticsearch)
+#   /opt/rabbitmq/                   ← RabbitMQ 4.1.0 binaries (user: root)
+#   /opt/minio/                      ← MinIO server binary (user: root)
+#   /opt/opencti/                    ← OpenCTI Platform code (user: root)
+#   /opt/opencti-worker/             ← OpenCTI Worker code (user: root)
+#   /etc/opencti/                    ← Platform config (start.sh, ssl/)
+#   /etc/opencti-worker/             ← Worker config (config.yml, worker.env)
+#   /etc/elasticsearch/              ← Elasticsearch config
+#   /var/lib/elasticsearch/          ← Elasticsearch data
+#   /var/lib/minio/                  ← MinIO data
+#   /var/log/v2-ti/opencti/          ← Platform logs (logrotate daily, 30 ngày)
+#   /var/log/v2-ti/opencti-worker/   ← Worker logs (logrotate daily, 30 ngày)
+#   /var/log/v2-ti/elasticsearch/    ← Elasticsearch logs (logrotate daily, 14 ngày)
+#   /var/log/v2-ti/rabbitmq/         ← RabbitMQ logs (logrotate daily, 14 ngày)
 #
 # =============================================================================
 set -e
@@ -74,8 +83,10 @@ echo "║        Tất cả services chạy bằng ROOT                    ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 echo "  Source: $DEPLOY_DIR"
-echo "  Target: /opt/python312, /opt/elasticsearch, /opt/rabbitmq,"
-echo "          /opt/minio, /opt/opencti, /opt/opencti-worker"
+echo "  Code:   /opt/{python312,elasticsearch,rabbitmq,minio,opencti,opencti-worker}"
+echo "  Config: /etc/{opencti,opencti-worker,elasticsearch,rabbitmq}"
+echo "  Data:   /var/lib/{elasticsearch,minio,rabbitmq,redis}"
+echo "  Logs:   /var/log/v2-ti/{opencti,opencti-worker,elasticsearch,rabbitmq}"
 echo ""
 
 # ══════════════════════════════════════════════════════════════
@@ -103,8 +114,8 @@ done < "$START_SH"
 [[ -n "${MINIO__SECRET_KEY:-}" ]]    || die "Thiếu MINIO__SECRET_KEY trong start.sh"
 
 # SSL paths (từ start.sh hoặc mặc định)
-SSL_KEY_PATH="${APP__HTTPS_CERT__KEY:-/opt/opencti/ssl/opencti.key}"
-SSL_CRT_PATH="${APP__HTTPS_CERT__CRT:-/opt/opencti/ssl/opencti.crt}"
+SSL_KEY_PATH="${APP__HTTPS_CERT__KEY:-/etc/opencti/ssl/opencti.key}"
+SSL_CRT_PATH="${APP__HTTPS_CERT__CRT:-/etc/opencti/ssl/opencti.crt}"
 
 ok "Đã đọc biến từ start.sh (Port=${APP__PORT}, Admin=${APP__ADMIN__EMAIL}, Token=${APP__ADMIN__TOKEN:0:8}...)"
 echo ""
@@ -177,16 +188,34 @@ fi
 # ES bắt buộc chạy user riêng (hard-coded check trong bin/elasticsearch, không thể bypass)
 detail "Tạo user: elasticsearch (ES bắt buộc user riêng, không thể chạy root)"
 useradd -r -m -d /opt/elasticsearch elasticsearch -s /sbin/nologin 2>/dev/null || true
-mkdir -p /opt/elasticsearch/{data,logs,tmp}
-detail "Copy: config/elasticsearch.yml → /opt/elasticsearch/config/"
-cp "$DEPLOY_DIR"/config/elasticsearch.yml /opt/elasticsearch/config/
-mkdir -p /opt/elasticsearch/config/jvm.options.d
-detail "Copy: config/elasticsearch-jvm.options → /opt/elasticsearch/config/jvm.options.d/opencti.options"
-cp "$DEPLOY_DIR"/config/elasticsearch-jvm.options /opt/elasticsearch/config/jvm.options.d/opencti.options
+# Config → /etc/elasticsearch/ (tách khỏi binaries)
+mkdir -p /etc/elasticsearch/jvm.options.d
+detail "Copy: config/elasticsearch.yml → /etc/elasticsearch/"
+cp "$DEPLOY_DIR"/config/elasticsearch.yml /etc/elasticsearch/
+detail "Copy: config/elasticsearch-jvm.options → /etc/elasticsearch/jvm.options.d/opencti.options"
+cp "$DEPLOY_DIR"/config/elasticsearch-jvm.options /etc/elasticsearch/jvm.options.d/opencti.options
+# Copy các file config mặc định từ ES distribution (nếu chưa có)
+for f in /opt/elasticsearch/config/*.yml /opt/elasticsearch/config/*.properties; do
+  [[ -f "$f" ]] && [[ ! -f "/etc/elasticsearch/$(basename "$f")" ]] && \
+    cp "$f" /etc/elasticsearch/ 2>/dev/null || true
+done
+[[ -d /opt/elasticsearch/config/jvm.options.d ]] && \
+  cp -n /opt/elasticsearch/config/jvm.options.d/* /etc/elasticsearch/jvm.options.d/ 2>/dev/null || true
+[[ -f /opt/elasticsearch/config/jvm.options ]] && \
+  cp -n /opt/elasticsearch/config/jvm.options /etc/elasticsearch/ 2>/dev/null || true
+chown -R elasticsearch:elasticsearch /etc/elasticsearch
+# Data → /var/lib/elasticsearch/
+mkdir -p /var/lib/elasticsearch
+chown elasticsearch:elasticsearch /var/lib/elasticsearch
+# Logs → /var/log/v2-ti/elasticsearch/
+mkdir -p /var/log/v2-ti/elasticsearch
+chown elasticsearch:elasticsearch /var/log/v2-ti/elasticsearch
+# Tmp cho ES
+mkdir -p /opt/elasticsearch/tmp
 chown -R elasticsearch:elasticsearch /opt/elasticsearch
 detail "Copy: config/elasticsearch.service → /etc/systemd/system/"
 cp "$DEPLOY_DIR"/config/elasticsearch.service /etc/systemd/system/
-ok "Elasticsearch → /opt/elasticsearch (⚠ user: elasticsearch — ES bắt buộc)"
+ok "Elasticsearch → /opt/elasticsearch (config: /etc/elasticsearch, data: /var/lib/elasticsearch, logs: /var/log/v2-ti/elasticsearch)"
 
 # ══════════════════════════════════════════════════════════════
 # STEP 6: Install RabbitMQ
@@ -198,8 +227,8 @@ if [[ ! -d /opt/rabbitmq/sbin ]]; then
   tar -xf "$DEPLOY_DIR"/files/rabbitmq-server-generic-unix-*.tar.xz \
     --strip-components=1 -C /opt/rabbitmq
 fi
-mkdir -p /var/lib/rabbitmq/mnesia /var/log/rabbitmq /etc/rabbitmq
-chmod 755 /var/lib/rabbitmq /var/lib/rabbitmq/mnesia /var/log/rabbitmq /etc/rabbitmq 2>/dev/null || true
+mkdir -p /var/lib/rabbitmq/mnesia /var/log/v2-ti/rabbitmq /etc/rabbitmq
+chmod 755 /var/lib/rabbitmq /var/lib/rabbitmq/mnesia /var/log/v2-ti/rabbitmq /etc/rabbitmq 2>/dev/null || true
 detail "Symlink: /opt/rabbitmq/sbin/* → /usr/local/bin/"
 for bin in /opt/rabbitmq/sbin/*; do
   ln -sf "$bin" /usr/local/bin/"$(basename "$bin")"
@@ -214,8 +243,8 @@ ok "RabbitMQ → /opt/rabbitmq (user: root, HOME=/root → Erlang cookie tại /
 # STEP 7: Install MinIO
 # ══════════════════════════════════════════════════════════════
 info 7 "Cài MinIO (chạy bằng root)"
-mkdir -p /opt/minio/bin /var/minio/data
-chmod 755 /var/minio/data
+mkdir -p /opt/minio/bin /var/lib/minio/data
+chmod 755 /var/lib/minio/data
 detail "Copy: $DEPLOY_DIR/files/minio → /opt/minio/bin/minio"
 cp "$DEPLOY_DIR"/files/minio /opt/minio/bin/ && chmod +x /opt/minio/bin/minio
 detail "Copy: $DEPLOY_DIR/files/mc → /tmp/mc"
@@ -224,7 +253,7 @@ detail "Write: /etc/default/minio (MINIO_ROOT_USER=${MINIO__ACCESS_KEY})"
 cat > /etc/default/minio <<EOF
 MINIO_ROOT_USER=${MINIO__ACCESS_KEY}
 MINIO_ROOT_PASSWORD=${MINIO__SECRET_KEY}
-MINIO_VOLUMES="/var/minio/data"
+MINIO_VOLUMES="/var/lib/minio/data"
 MINIO_OPTS="--console-address :9001"
 EOF
 chmod 600 /etc/default/minio
@@ -325,8 +354,10 @@ ok "RabbitMQ user + MinIO bucket configured"
 info 12 "Cài OpenCTI Platform (chạy bằng root)"
 detail "Extract: $DEPLOY_DIR/files/opencti.tar.gz → /opt/opencti/"
 tar -xzf "$DEPLOY_DIR"/files/opencti.tar.gz -C /opt/
-detail "Copy: config/start.sh → /opt/opencti/start.sh"
-cp "$DEPLOY_DIR"/config/start.sh /opt/opencti/ && chmod +x /opt/opencti/start.sh
+# Config → /etc/opencti/ (tách code và config)
+mkdir -p /etc/opencti
+detail "Copy: config/start.sh → /etc/opencti/start.sh"
+cp "$DEPLOY_DIR"/config/start.sh /etc/opencti/ && chmod +x /etc/opencti/start.sh
 detail "Install SSL cert → $(dirname "$SSL_KEY_PATH")/"
 SSL_DIR="$(dirname "$SSL_KEY_PATH")"
 mkdir -p "$SSL_DIR"
@@ -364,8 +395,8 @@ chmod 644 "$SSL_CRT_PATH"
 detail "SSL permissions: dir=700, key=600, cert=644"
 detail "Copy: config/opencti.service → /etc/systemd/system/"
 cp "$DEPLOY_DIR"/config/opencti.service /etc/systemd/system/
-detail "Tạo thư mục log: /var/log/v2-ti/opencti/, /var/log/v2-ti/opencti-worker/"
-mkdir -p /var/log/v2-ti/opencti /var/log/v2-ti/opencti-worker
+detail "Tạo thư mục log: /var/log/v2-ti/{opencti,opencti-worker,elasticsearch,rabbitmq}"
+mkdir -p /var/log/v2-ti/opencti /var/log/v2-ti/opencti-worker /var/log/v2-ti/elasticsearch /var/log/v2-ti/rabbitmq
 chmod 755 /var/log/v2-ti/opencti /var/log/v2-ti/opencti-worker
 detail "Copy: config/opencti-logrotate.conf → /etc/logrotate.d/opencti"
 cp "$DEPLOY_DIR"/config/opencti-logrotate.conf /etc/logrotate.d/opencti
@@ -415,8 +446,9 @@ if [[ ! -d /opt/opencti-worker/venv ]]; then
 else
   ok "Worker venv already exists → skip"
 fi
-detail "Write: /opt/opencti-worker/config.yml (token: ${APP__ADMIN__TOKEN:0:8}...)"
-cat > /opt/opencti-worker/config.yml <<WEOF
+detail "Write: /etc/opencti-worker/config.yml (token: ${APP__ADMIN__TOKEN:0:8}...)"
+mkdir -p /etc/opencti-worker
+cat > /etc/opencti-worker/config.yml <<WEOF
 opencti:
   url: 'https://localhost:${APP__PORT}'
   token: '${APP__ADMIN__TOKEN}'
@@ -424,14 +456,16 @@ opencti:
 worker:
   log_level: 'info'
 WEOF
-chmod 600 /opt/opencti-worker/config.yml
-detail "Write: /opt/opencti-worker/worker.env"
-cat > /opt/opencti-worker/worker.env <<ENVEOF
+chmod 600 /etc/opencti-worker/config.yml
+detail "Write: /etc/opencti-worker/worker.env"
+cat > /etc/opencti-worker/worker.env <<ENVEOF
 OPENCTI_URL=https://localhost:${APP__PORT}
 OPENCTI_TOKEN=${APP__ADMIN__TOKEN}
 OPENCTI_SSL_VERIFY=false
 ENVEOF
-chmod 600 /opt/opencti-worker/worker.env
+chmod 600 /etc/opencti-worker/worker.env
+# Symlink config.yml vào working dir để worker.py tìm được
+ln -sf /etc/opencti-worker/config.yml /opt/opencti-worker/config.yml
 detail "Copy: config/opencti-worker@.service → /etc/systemd/system/"
 cp "$DEPLOY_DIR"/config/opencti-worker@.service /etc/systemd/system/
 ok "Worker → /opt/opencti-worker ($WORKERS instances, user: root)"
@@ -481,20 +515,34 @@ done
 echo ""
 echo "  📁 File Layout trên server:"
 echo "    /opt/python312/              Python 3.12.8 (libpython3.12.so)"
-echo "    /opt/elasticsearch/          Elasticsearch 8.17.0 (user: elasticsearch)"
-echo "    /opt/rabbitmq/               RabbitMQ 4.1.0 (user: root)"
-echo "    /opt/minio/                  MinIO server (user: root)"
-echo "    /opt/opencti/                OpenCTI Platform (user: root)"
+echo "    /opt/elasticsearch/          Elasticsearch 8.17.0 binaries"
+echo "    /opt/rabbitmq/               RabbitMQ 4.1.0 binaries"
+echo "    /opt/minio/                  MinIO server binary"
+echo "    /opt/opencti/                OpenCTI Platform code"
 echo "    /opt/opencti/.python-venv/   Platform Python venv"
-echo "    /opt/opencti/ssl/            SSL certificates"
-echo "    /opt/opencti-worker/         Worker x$WORKERS (user: root)"
+echo "    /opt/opencti-worker/         Worker x$WORKERS code"
 echo "    /opt/opencti-worker/venv/    Worker Python venv"
 echo ""
+echo "  📝 Config Files:"
+echo "    /etc/opencti/start.sh              Platform startup script"
+echo "    /etc/opencti/ssl/                  SSL certificates"
+echo "    /etc/opencti-worker/config.yml     Worker config"
+echo "    /etc/opencti-worker/worker.env     Worker environment"
+echo "    /etc/elasticsearch/                Elasticsearch config"
+echo "    /etc/rabbitmq/                     RabbitMQ config"
+echo "    /etc/default/minio                 MinIO config"
+echo ""
+echo "  💾 Data:"
+echo "    /var/lib/elasticsearch/            Elasticsearch data"
+echo "    /var/lib/minio/data/               MinIO object storage"
+echo "    /var/lib/rabbitmq/mnesia/          RabbitMQ data"
+echo "    /var/lib/redis/                    Redis data"
+echo ""
 echo "  📝 Log Files:"
-echo "    /var/log/v2-ti/opencti/opencti.log          Platform stdout"
-echo "    /var/log/v2-ti/opencti/opencti-error.log    Platform stderr"
-echo "    /var/log/v2-ti/opencti-worker/worker-N.log  Worker stdout (N=1..$WORKERS)"
-echo "    /var/log/v2-ti/opencti-worker/worker-N-error.log  Worker stderr"
+echo "    /var/log/v2-ti/opencti/            Platform logs"
+echo "    /var/log/v2-ti/opencti-worker/     Worker logs"
+echo "    /var/log/v2-ti/elasticsearch/      Elasticsearch logs"
+echo "    /var/log/v2-ti/rabbitmq/           RabbitMQ logs"
 echo ""
 echo "  🔧 Service Users:"
 echo "    elasticsearch                user: elasticsearch (ES bắt buộc)"
@@ -506,9 +554,10 @@ echo "  👤 User: ${APP__ADMIN__EMAIL}"
 echo "  🔑 Pass: ${APP__ADMIN__PASSWORD}"
 echo ""
 echo "  📋 Commands:"
-echo "    tail -f /var/log/v2-ti/opencti/opencti.log           # Platform logs"
-echo "    tail -f /var/log/v2-ti/opencti/opencti-error.log     # Platform error logs"
-echo "    tail -f /var/log/v2-ti/opencti-worker/worker-1.log   # Worker 1 logs"
-echo "    systemctl status opencti                       # Platform status"
-echo "    systemctl status opencti-worker@1              # Worker 1 status"
+echo "    tail -f /var/log/v2-ti/opencti/opencti.log            # Platform logs"
+echo "    tail -f /var/log/v2-ti/opencti/opencti-error.log      # Platform error logs"
+echo "    tail -f /var/log/v2-ti/opencti-worker/worker-1.log    # Worker 1 logs"
+echo "    tail -f /var/log/v2-ti/elasticsearch/*.log            # Elasticsearch logs"
+echo "    systemctl status opencti                        # Platform status"
+echo "    systemctl status opencti-worker@1               # Worker 1 status"
 echo ""

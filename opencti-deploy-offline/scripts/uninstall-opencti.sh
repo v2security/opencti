@@ -36,10 +36,17 @@ echo "▸ Xóa systemd units"
 rm -f /etc/systemd/system/{opencti,opencti-worker@,elasticsearch,rabbitmq-server,minio}.service
 systemctl daemon-reload
 
-# Binaries
-echo "▸ Xóa binaries"
+# Binaries (/opt)
+echo "▸ Xóa binaries (/opt)"
 rm -rf /opt/opencti-worker /opt/rabbitmq /opt/minio /opt/python312
 [[ "$KEEP_DATA" == true ]] || rm -rf /opt/opencti /opt/elasticsearch
+
+# Configs (/etc)
+echo "▸ Xóa configs (/etc)"
+rm -rf /etc/opencti /etc/opencti-worker /etc/elasticsearch
+rm -f /etc/default/minio
+rm -rf /etc/rabbitmq
+rm -f /etc/logrotate.d/opencti
 
 # RabbitMQ symlinks
 echo "▸ Xóa symlinks"
@@ -49,15 +56,12 @@ done
 rm -f /usr/local/bin/python3.12 /usr/local/bin/python3 /usr/local/bin/pip3
 rm -f /tmp/mc
 
-# Configs
-echo "▸ Xóa configs"
-rm -f /etc/default/minio
-rm -rf /etc/rabbitmq
-
-# Data
+# Data + Logs
 if [[ "$KEEP_DATA" == false ]]; then
-  echo "▸ Xóa data"
-  rm -rf /var/lib/rabbitmq /var/log/rabbitmq /var/minio/data
+  echo "▸ Xóa data (/var/lib)"
+  rm -rf /var/lib/rabbitmq /var/lib/elasticsearch /var/lib/minio
+  echo "▸ Xóa logs (/var/log/v2-ti)"
+  rm -rf /var/log/v2-ti
 fi
 
 echo ""

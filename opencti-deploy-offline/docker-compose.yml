@@ -35,7 +35,9 @@ services:
       - ./output:/root/opencti-deploy:rw
       # Persist data giữa các lần test (không cần re-deploy)
       - opt-data:/opt                    # ES, RabbitMQ, MinIO, OpenCTI, Python, Worker
-      - var-data:/var                    # Redis data, RabbitMQ mnesia, MinIO data
+      - var-lib-data:/var/lib            # ES data, RabbitMQ mnesia, MinIO data, Redis
+      - var-log-data:/var/log            # All logs under /var/log/v2-ti/
+      - etc-data:/etc                    # Config: opencti, elasticsearch, rabbitmq
     ports:
       - "18443:8443"                      # OpenCTI HTTPS
       - "19200:9200"                      # Elasticsearch
@@ -49,4 +51,6 @@ services:
 
 volumes:
   opt-data:
-  var-data:
+  var-lib-data:
+  var-log-data:
+  etc-data:
