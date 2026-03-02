@@ -4,5 +4,8 @@ output/
 # SSL certificates (contain private keys — NEVER commit)
 cert/
 
+# Start script (contains secrets — NEVER commit)
+config/start.sh
+
 # Offline deploy archive
 opencti-offline-deploy.tar.gz
