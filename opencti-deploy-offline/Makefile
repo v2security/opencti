@@ -136,8 +136,9 @@ clean: ## Xóa container + images
 
 destroy: ## Xóa TẤT CẢ (container + images + volumes + output)
 	$(COMPOSE) down -v --rmi local 2>/dev/null || true
+	docker run --rm -v "$(CURDIR)/output:/d" alpine chown -R $$(id -u):$$(id -g) /d 2>/dev/null || true
 	rm -rf output/
 	rm -f opencti-offline-deploy.tar.gz
-	docker rmi opencti-offline-builder:latest 2>/dev/null || true
+	docker rmi opencti-offline-builder:latest rockylinux-node22 2>/dev/null || true
 	docker volume prune -f 2>/dev/null || true
 	@echo "✓ Đã xóa tất cả"

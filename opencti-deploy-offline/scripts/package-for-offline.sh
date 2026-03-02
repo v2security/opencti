@@ -1,47 +1,41 @@
 #!/bin/bash
 # =============================================================================
-# ĐÓNG GÓI OPENCTI OFFLINE
-# =============================================================================
+# ĐÓNG GÓI OPENCTI OFFLINE — Build từ source code trên Rocky 9 + Node.js 22
 #
-# Yêu cầu:
-#   - Docker
-#   - files/Python-3.12.8.tgz (Python source)
-#   - files/elasticsearch-8.17.0-linux-x86_64.tar.gz
-#   - files/rabbitmq-server-generic-unix-4.1.0.tar.xz
-#   - files/minio, files/mc
-#   - rpm/*.rpm
+# Yêu cầu: Docker, files/{Python-3.12.8.tgz, elasticsearch-*.tar.gz,
+#           rabbitmq-server-*.tar.xz, minio, mc}, rpm/*.rpm
 #
-# Output (sau khi build xong):
-#   opencti-offline-deploy.tar.gz (~1.2GB)
-#   └── opencti-deploy/
-#       ├── files/
-#       │   ├── opencti.tar.gz                 ← OpenCTI Platform (Node.js app + rebuilt native module)
-#       │   ├── opencti-worker.tar.gz          ← Worker Python scripts + wheels
-#       │   ├── python312.tar.gz               ← Python 3.12.8 compiled (--enable-shared)
-#       │   ├── elasticsearch-8.17.0-*.tar.gz  ← Elasticsearch tarball
-#       │   ├── rabbitmq-server-*.tar.xz       ← RabbitMQ tarball
-#       │   ├── minio                          ← MinIO server binary
-#       │   └── mc                             ← MinIO client binary
-#       ├── rpm/
-#       │   └── *.rpm                          ← Node.js 22, Redis, Erlang, system deps
-#       ├── config/
-#       │   ├── start.sh                       ← OpenCTI Platform start script
-#       │   ├── elasticsearch.yml              ← ES config
-#       │   ├── elasticsearch-jvm.options      ← ES JVM options
-#       │   ├── elasticsearch.service          ← ES systemd service
-#       │   ├── rabbitmq-server.service        ← RabbitMQ systemd service
-#       │   ├── 90-opencti.conf                ← RabbitMQ config
-#       │   ├── minio.service                  ← MinIO systemd service
-#       │   ├── opencti.service                ← OpenCTI systemd service
-#       │   └── opencti-worker@.service        ← Worker systemd service (template)
-#       └── scripts/
-#           ├── deploy-offline.sh              ← Deploy script
-#           └── uninstall-opencti.sh           ← Uninstall script
+# Output: opencti-offline-deploy.tar.gz (~1.2GB)
+# opencti-deploy/
+# |-- cert
+# |   |-- opencti.crt
+# |   |-- opencti.key
+# |-- config
+# |   |-- 90-opencti.conf
+# |   |-- elasticsearch-jvm.options
+# |   |-- elasticsearch.service
+# |   |-- elasticsearch.yml
+# |   |-- minio.service
+# |   |-- opencti-logrotate.conf
+# |   |-- opencti-worker@.service
+# |   |-- opencti.service
+# |   |-- rabbitmq-server.service
+# |   |-- start.sh
+# |-- files
+# |   |-- elasticsearch-8.17.0-linux-x86_64.tar.gz
+# |   |-- mc
+# |   |-- minio
+# |   |-- opencti-worker.tar.gz
+# |   |-- opencti.tar.gz
+# |   |-- python312.tar.gz
+# |   |-- rabbitmq-server-generic-unix-4.1.0.tar.xz
+# |-- rpm/*
+# |-- scripts
+#     |-- deploy-offline.sh
+#     |-- gen-ssl-cert.sh
+#     |-- uninstall-opencti.sh
 #
-# Cách dùng:
-#   make package           # hoặc: bash scripts/package-for-offline.sh
-#   → File: opencti-offline-deploy.tar.gz
-#   → Copy lên máy đích, giải nén, chạy: bash scripts/deploy-offline.sh
+# Dùng: make package  →  copy lên máy đích  →  bash scripts/deploy-offline.sh
 # =============================================================================
 set -euo pipefail
 
@@ -49,17 +43,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKSPACE_ROOT="$(cd "$BASE_DIR/.." && pwd)"
 OUTPUT_DIR="$BASE_DIR/output"
-IMAGE="opencti-offline-builder"
-TOTAL_STEPS=9
+ROCKY_NODE_IMAGE="rockylinux-node22"
+TOTAL_STEPS=8
 
 info()   { echo ""; echo "▸ [STEP $1/$TOTAL_STEPS] $2"; }
 detail() { echo "  → $*"; }
 ok()     { echo "  ✓ $*"; }
 die()    { echo "  ✗ $*" >&2; exit 1; }
 
-# Cleanup root-owned files từ Docker containers
 cleanup_tmp() {
-  for d in /tmp/opencti-extract /tmp/opencti-worker; do
+  for d in /tmp/opencti-extract /tmp/opencti-worker /tmp/opencti-build; do
     if [[ -d "$d" ]]; then
       docker run --rm -v "$d:/d" alpine chown -R "$(id -u):$(id -g)" /d 2>/dev/null || true
       rm -rf "$d"
@@ -71,32 +64,29 @@ trap cleanup_tmp EXIT
 echo ""
 echo "══════════════════════════════════════════════════════════════"
 echo "  ĐÓNG GÓI OPENCTI OFFLINE"
-echo "══════════════════════════════════════════════════════════════"
 echo "  Workspace: $WORKSPACE_ROOT"
 echo "  Output:    $OUTPUT_DIR"
-echo ""
+echo "══════════════════════════════════════════════════════════════"
 
 # ── Pre-checks ───────────────────────────────────────────────
 echo "▸ Pre-checks"
 command -v docker &>/dev/null || die "Cần Docker"
-[[ -f "$WORKSPACE_ROOT/Dockerfile" ]] || die "Không tìm thấy Dockerfile ở $WORKSPACE_ROOT"
+[[ -d "$WORKSPACE_ROOT/opencti-platform/opencti-front" ]] || die "Thiếu source: opencti-front/"
+[[ -d "$WORKSPACE_ROOT/opencti-platform/opencti-graphql" ]] || die "Thiếu source: opencti-graphql/"
 for f in "$BASE_DIR"/files/{minio,mc,elasticsearch-*.tar.gz,rabbitmq-server-generic-unix-*.tar.xz}; do
   [[ -f "$f" ]] || die "Thiếu: $f"
 done
 [[ $(ls "$BASE_DIR"/rpm/*.rpm 2>/dev/null | wc -l) -gt 0 ]] || die "Thiếu RPMs"
 [[ -f "$BASE_DIR/files/Python-3.12.8.tgz" ]] || die "Thiếu files/Python-3.12.8.tgz"
-ok "Tất cả pre-checks OK"
+ok "Pre-checks OK"
 
 # ══════════════════════════════════════════════════════════════
-# STEP 1: Compile Python 3.12 (nếu chưa có)
+# STEP 1: Compile Python 3.12.8 (--enable-shared, Rocky 9)
 # ══════════════════════════════════════════════════════════════
 info 1 "Compile Python 3.12.8 (--enable-shared, Rocky 9 glibc)"
-detail "Input:  files/Python-3.12.8.tgz (source tarball)"
-detail "Output: files/python312.tar.gz (compiled, ~60MB)"
 if [[ -f "$BASE_DIR/files/python312.tar.gz" ]]; then
-  ok "python312.tar.gz đã có → skip compile"
+  ok "python312.tar.gz đã có → skip"
 else
-  detail "Chạy Rocky 9 container để compile..."
   docker run --rm -v "$BASE_DIR/files:/files" rockylinux:9 bash -c '
     set -e
     dnf install -y gcc make openssl-devel bzip2-devel libffi-devel \
@@ -113,87 +103,171 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════
-# STEP 2: Docker build OpenCTI từ source
+# STEP 2: Build base image Rocky 9 + Node.js 22
 # ══════════════════════════════════════════════════════════════
-info 2 "Docker build OpenCTI từ source"
-detail "Dockerfile: $WORKSPACE_ROOT/Dockerfile"
-detail "Image:      $IMAGE:latest"
+# Dùng Rocky 9 (glibc) thay Alpine (musl) vì server đích là Rocky 9.
+# → Native modules đã dùng glibc sẵn, không cần rebuild musl→glibc.
+info 2 "Build base image Rocky 9 + Node.js 22"
+# Đảm bảo output/ thuộc user hiện tại (có thể root-owned từ Docker trước đó)
+if [[ -d "$OUTPUT_DIR" ]] && ! mkdir -p "$OUTPUT_DIR/files" 2>/dev/null; then
+  docker run --rm -v "$OUTPUT_DIR:/d" alpine chown -R "$(id -u):$(id -g)" /d
+fi
 mkdir -p "$OUTPUT_DIR/files"
-cd "$WORKSPACE_ROOT"
-docker build -t "$IMAGE:latest" -f Dockerfile --progress=plain .
-ok "Docker build thành công"
+rm -rf /tmp/opencti-build && mkdir -p /tmp/opencti-build
+
+docker build -t "$ROCKY_NODE_IMAGE" - <<'ROCKY_DOCKERFILE'
+FROM rockylinux:9
+RUN dnf module enable -y nodejs:22 && \
+    dnf install -y nodejs npm gcc gcc-c++ make git python3 python3-devel \
+                   openssl-devel && \
+    dnf clean all && \
+    npm i -g corepack node-gyp && \
+    corepack enable
+ROCKY_DOCKERFILE
+ok "Image $ROCKY_NODE_IMAGE sẵn sàng"
 
 # ══════════════════════════════════════════════════════════════
-# STEP 3: Extract OpenCTI Platform từ Docker image
+# STEP 3: Build Frontend từ source code
 # ══════════════════════════════════════════════════════════════
-info 3 "Extract OpenCTI Platform từ Docker image"
-detail "Docker image: $IMAGE:latest"
-detail "Extract to:   /tmp/opencti-extract/opencti/"
-cleanup_tmp
-mkdir -p /tmp/opencti-extract
-CID=$(docker create "$IMAGE:latest")
-docker cp "$CID:/opt/opencti" /tmp/opencti-extract/
-docker rm "$CID" &>/dev/null || true
-ok "Extracted OpenCTI Platform"
-
-# ══════════════════════════════════════════════════════════════
-# STEP 4: Rebuild node-calls-python (musl→glibc + Python 3.12)
-# ══════════════════════════════════════════════════════════════
-info 4 "Rebuild node-calls-python (glibc + Python 3.12)"
-detail "Vấn đề: Docker image dùng Alpine (musl), Rocky 9 dùng glibc"
-detail "Giải pháp: Rebuild native module trong Rocky 9 container"
-detail "  - Mount: /tmp/opencti-extract/opencti → /opt/opencti"
-detail "  - Mount: files/python312.tar.gz → /tmp/python312.tar.gz"
-detail "  - Cài Node.js 22 + gcc/g++/make trong container"
-detail "  - npm rebuild node-calls-python --build-from-source"
-detail "  - Replace bundled .node file (musl) bằng rebuilt file (glibc)"
+info 3 "Build Frontend từ source code"
 docker run --rm \
-  -v "/tmp/opencti-extract/opencti:/opt/opencti" \
-  -v "$BASE_DIR/files/python312.tar.gz:/tmp/python312.tar.gz" \
-  rockylinux:9 bash -c '
+  -v "$WORKSPACE_ROOT/opencti-platform:/src:ro" \
+  -v "/tmp/opencti-build:/build" \
+  "$ROCKY_NODE_IMAGE" bash -c '
     set -e
-    dnf module enable -y nodejs:22 >/dev/null 2>&1
-    dnf install -y nodejs npm gcc gcc-c++ make >/dev/null 2>&1
+    mkdir -p /build/front && cd /build/front
+    cp /src/.yarnrc.yml /src/opencti-front/package.json /src/opencti-front/yarn.lock ./
+    cp -a /src/opencti-front/packages ./packages
+    yarn install 2>&1
+
+    cp -a /src/opencti-front/src ./src
+    cp -a /src/opencti-front/builder ./builder
+    cp -a /src/opencti-front/lang ./lang 2>/dev/null || true
+    cp /src/opencti-front/relay.config.json /src/opencti-front/vite.config.mts ./
+    cp /src/opencti-front/tsconfig.json /src/opencti-front/tsconfig.node.json ./
+    cp /src/opencti-front/index.html /src/opencti-front/index.d.ts ./ 2>/dev/null || true
+
+    mkdir -p /build/graphql/config/schema
+    cp /src/opencti-graphql/config/schema/opencti.graphql /build/graphql/config/schema/
+
+    yarn build:standalone 2>&1
+    echo "Frontend: $(du -sh builder/prod/build/ 2>/dev/null | cut -f1)"
+  '
+ok "Frontend build thành công"
+
+# ══════════════════════════════════════════════════════════════
+# STEP 4: Build Backend từ source code
+# ══════════════════════════════════════════════════════════════
+info 4 "Build Backend từ source code"
+docker run --rm \
+  -v "$WORKSPACE_ROOT/opencti-platform:/src:ro" \
+  -v "/tmp/opencti-build:/build" \
+  "$ROCKY_NODE_IMAGE" bash -c '
+    set -e
+    # Runtime node_modules
+    mkdir -p /build/graphql-deps && cd /build/graphql-deps
+    cp /src/.yarnrc.yml /src/opencti-graphql/package.json /src/opencti-graphql/yarn.lock ./
+    cp -a /src/opencti-graphql/patch ./patch
+    yarn install 2>&1
+    yarn cache clean --all
+
+    # Build back.js
+    mkdir -p /build/graphql-builder && cd /build/graphql-builder
+    cp /src/.yarnrc.yml /src/opencti-graphql/package.json /src/opencti-graphql/yarn.lock ./
+    cp -a /src/opencti-graphql/patch ./patch
+    yarn install 2>&1
+    cp -a /src/opencti-graphql/src ./src
+    cp -a /src/opencti-graphql/config ./config
+    cp -a /src/opencti-graphql/static ./static
+    cp -a /src/opencti-graphql/script ./script
+    cp -a /src/opencti-graphql/builder ./builder
+    cp /src/opencti-graphql/tsconfig.json /src/opencti-graphql/graphql-codegen.yml ./ 2>/dev/null || true
+    yarn build:prod 2>&1
+    echo "Backend: $(du -sh build/ 2>/dev/null | cut -f1)"
+  '
+ok "Backend build thành công"
+
+# ══════════════════════════════════════════════════════════════
+# STEP 5: Rebuild node-calls-python (link Python 3.12)
+# ══════════════════════════════════════════════════════════════
+# Nhờ Rocky 9, native module đã dùng glibc (OK). Nhưng VẪN phải rebuild vì:
+#   - node-calls-python cần link dynamic với libpython
+#   - Khi yarn install, nó link với Python 3.9 mặc định của Rocky 9
+#   - Server đích dùng Python 3.12 custom (/opt/python312/, --enable-shared)
+#   → Rebuild để .node link đúng libpython3.12.so
+#   → Không rebuild = crash "libpython3.12.so: cannot open shared object file"
+info 5 "Rebuild node-calls-python (link libpython3.12.so)"
+docker run --rm \
+  -v "/tmp/opencti-build/graphql-deps:/deps" \
+  -v "$BASE_DIR/files/python312.tar.gz:/tmp/python312.tar.gz:ro" \
+  "$ROCKY_NODE_IMAGE" bash -c '
+    set -e
     tar -xzf /tmp/python312.tar.gz -C /opt/
     export PATH="/opt/python312/bin:$PATH"
     export LD_LIBRARY_PATH="/opt/python312/lib:${LD_LIBRARY_PATH:-}"
-    cd /opt/opencti
+    python3.12 --version
+
+    cd /deps
     rm -rf node_modules/node-calls-python/build
     npm rebuild node-calls-python --build-from-source 2>&1
+
     REBUILT="node_modules/node-calls-python/build/Release/nodecallspython.node"
-    BUNDLED=$(find build -maxdepth 1 -name "nodecallspython-*.node" -type f | head -1)
-    if [[ -f "$REBUILT" ]] && [[ -n "$BUNDLED" ]]; then
-      cp "$REBUILT" "$BUNDLED"
-      echo "Replaced: $BUNDLED"
-      echo "ldd:"
-      ldd "$BUNDLED" | grep -E "python|musl|not.found" || echo "  (clean — no musl/missing refs)"
+    if [[ -f "$REBUILT" ]]; then
+      echo "OK: $REBUILT"
+      ldd "$REBUILT" | grep -E "python|not.found" || echo "  (clean)"
     else
       echo "ERROR: rebuilt .node not found" >&2; exit 1
     fi
   '
-ok "Native module rebuilt (glibc + libpython3.12.so)"
+ok "node-calls-python rebuilt (glibc + libpython3.12.so)"
 
 # ══════════════════════════════════════════════════════════════
-# STEP 5: Download Python wheels cho Platform
+# STEP 6: Assemble + Đóng gói Platform
 # ══════════════════════════════════════════════════════════════
-info 5 "Download Python wheels cho Platform (Python 3.12)"
-detail "Output: /tmp/opencti-extract/opencti/python-wheels/"
-detail "Dùng cho pip install --no-index khi deploy offline"
-mkdir -p /tmp/opencti-extract/opencti/python-wheels
+info 6 "Assemble + Đóng gói OpenCTI Platform"
+
+rm -rf /tmp/opencti-extract
+mkdir -p /tmp/opencti-extract
+docker run --rm \
+  -v "/tmp/opencti-build:/build:ro" \
+  -v "/tmp/opencti-extract:/out" \
+  -v "$WORKSPACE_ROOT/opencti-platform/opencti-graphql:/graphql-src:ro" \
+  rockylinux:9 bash -c '
+    set -e
+    mkdir -p /out/opencti && cd /out/opencti
+
+    cp -a /build/graphql-deps/node_modules ./node_modules
+    cp -a /build/graphql-builder/build ./build
+    cp -a /build/graphql-builder/static ./static
+    cp -a /build/front/builder/prod/build ./public
+    cp -a /graphql-src/src ./src
+    cp -a /graphql-src/config ./config
+    cp -a /graphql-src/script ./script 2>/dev/null || true
+
+    # Replace bundled .node với rebuilt version (link Python 3.12)
+    REBUILT="node_modules/node-calls-python/build/Release/nodecallspython.node"
+    BUNDLED=$(find build -maxdepth 1 -name "nodecallspython-*.node" -type f 2>/dev/null | head -1)
+    if [[ -f "$REBUILT" ]] && [[ -n "$BUNDLED" ]]; then
+      cp "$REBUILT" "$BUNDLED"
+      echo "Replaced: $BUNDLED"
+    fi
+
+    install -m 0777 -d logs telemetry .support
+    echo "Platform: $(du -sh /out/opencti/ | cut -f1)"
+  '
+
+# Download Python wheels
+detail "Download Python wheels (3.12)"
 docker run --rm -v "/tmp/opencti-extract/opencti:/opt/opencti" \
   python:3.12-slim sh -c \
-  "pip download pip wheel setuptools -d /opt/opencti/python-wheels 2>/dev/null; \
+  "mkdir -p /opt/opencti/python-wheels && \
+   pip download pip wheel setuptools -d /opt/opencti/python-wheels 2>/dev/null; \
    pip download -r /opt/opencti/src/python/requirements.txt -d /opt/opencti/python-wheels \
      --only-binary=:all: --platform manylinux2014_x86_64 --python-version 3.12 2>/dev/null || \
    pip download -r /opt/opencti/src/python/requirements.txt -d /opt/opencti/python-wheels 2>&1"
-ok "Python wheels ($(ls /tmp/opencti-extract/opencti/python-wheels/ 2>/dev/null | wc -l) files)"
 
-# ══════════════════════════════════════════════════════════════
-# STEP 6: Đóng gói opencti.tar.gz
-# ══════════════════════════════════════════════════════════════
-info 6 "Đóng gói opencti.tar.gz"
-detail "Source: /tmp/opencti-extract/opencti/"
-detail "Output: $OUTPUT_DIR/files/opencti.tar.gz"
+# Đóng gói
+detail "Đóng gói opencti.tar.gz"
 docker run --rm -v "/tmp/opencti-extract:/d" alpine chown -R "$(id -u):$(id -g)" /d
 cd /tmp/opencti-extract
 tar -czf "$OUTPUT_DIR/files/opencti.tar.gz" \
@@ -204,11 +278,10 @@ ok "opencti.tar.gz ($(du -h "$OUTPUT_DIR/files/opencti.tar.gz" | cut -f1))"
 # STEP 7: Đóng gói Worker + wheels
 # ══════════════════════════════════════════════════════════════
 info 7 "Đóng gói OpenCTI Worker"
-detail "Source: $WORKSPACE_ROOT/opencti-worker/src/*.py"
-detail "Output: $OUTPUT_DIR/files/opencti-worker.tar.gz"
 rm -rf /tmp/opencti-worker && mkdir -p /tmp/opencti-worker/wheels
 cp "$WORKSPACE_ROOT/opencti-worker/src"/*.py /tmp/opencti-worker/
 cp "$WORKSPACE_ROOT/opencti-worker/src/requirements.txt" /tmp/opencti-worker/
+
 detail "Download worker Python wheels (3.12)"
 docker run --rm -v "/tmp/opencti-worker:/w" python:3.12-slim sh -c \
   "pip download pip wheel setuptools -d /w/wheels 2>/dev/null; \
@@ -221,93 +294,57 @@ cd /tmp && tar -czf "$OUTPUT_DIR/files/opencti-worker.tar.gz" \
 ok "opencti-worker.tar.gz ($(du -h "$OUTPUT_DIR/files/opencti-worker.tar.gz" | cut -f1))"
 
 # ══════════════════════════════════════════════════════════════
-# STEP 8: Copy tất cả files vào output/
+# STEP 8: Copy files + Tạo archive
 # ══════════════════════════════════════════════════════════════
-info 8 "Copy binaries + RPMs + configs + scripts → output/"
-detail "Copy infrastructure binaries:"
-detail "  files/elasticsearch-*.tar.gz    → output/files/"
+info 8 "Copy files + Tạo archive cuối cùng"
+
 cp "$BASE_DIR"/files/elasticsearch-*.tar.gz "$OUTPUT_DIR/files/" 2>/dev/null || true
-detail "  files/rabbitmq-server-*.tar.xz  → output/files/"
 cp "$BASE_DIR"/files/rabbitmq-server-generic-unix-*.tar.xz "$OUTPUT_DIR/files/" 2>/dev/null || true
-detail "  files/minio                     → output/files/"
-cp "$BASE_DIR"/files/minio "$OUTPUT_DIR/files/"
-detail "  files/mc                        → output/files/"
-cp "$BASE_DIR"/files/mc "$OUTPUT_DIR/files/"
-detail "  files/python312.tar.gz          → output/files/"
+cp "$BASE_DIR"/files/minio "$BASE_DIR"/files/mc "$OUTPUT_DIR/files/"
 cp "$BASE_DIR"/files/python312.tar.gz "$OUTPUT_DIR/files/"
 chmod +x "$OUTPUT_DIR"/files/{minio,mc}
 
-detail "Copy RPMs:"
 mkdir -p "$OUTPUT_DIR/rpm"
-detail "  rpm/*.rpm ($(ls "$BASE_DIR"/rpm/*.rpm | wc -l) files) → output/rpm/"
 cp "$BASE_DIR"/rpm/*.rpm "$OUTPUT_DIR/rpm/"
 
-detail "Copy configs:"
 mkdir -p "$OUTPUT_DIR/config"
-detail "  config/*  → output/config/"
 cp "$BASE_DIR"/config/* "$OUTPUT_DIR/config/"
 
-detail "Copy scripts:"
 mkdir -p "$OUTPUT_DIR/scripts"
-detail "  scripts/deploy-offline.sh     → output/scripts/"
 cp "$SCRIPT_DIR"/deploy-offline.sh "$OUTPUT_DIR/scripts/"
-detail "  scripts/uninstall-opencti.sh  → output/scripts/"
 cp "$SCRIPT_DIR"/uninstall-opencti.sh "$OUTPUT_DIR/scripts/" 2>/dev/null || true
-detail "  scripts/gen-ssl-cert.sh       → output/scripts/"
 cp "$SCRIPT_DIR"/gen-ssl-cert.sh "$OUTPUT_DIR/scripts/" 2>/dev/null || true
 
-detail "Generate SSL certificate → output/cert/"
 mkdir -p "$OUTPUT_DIR/cert"
 if [[ -f "$BASE_DIR/cert/opencti.key" ]] && [[ -f "$BASE_DIR/cert/opencti.crt" ]]; then
-  detail "  Dùng cert đã có từ cert/"
-  cp "$BASE_DIR/cert/opencti.key" "$OUTPUT_DIR/cert/"
-  cp "$BASE_DIR/cert/opencti.crt" "$OUTPUT_DIR/cert/"
+  cp "$BASE_DIR/cert/opencti.key" "$BASE_DIR/cert/opencti.crt" "$OUTPUT_DIR/cert/"
 else
-  detail "  Gen cert mới → cert/ + output/cert/"
   bash "$SCRIPT_DIR/gen-ssl-cert.sh" "$BASE_DIR/cert"
-  cp "$BASE_DIR/cert/opencti.key" "$OUTPUT_DIR/cert/"
-  cp "$BASE_DIR/cert/opencti.crt" "$OUTPUT_DIR/cert/"
+  cp "$BASE_DIR/cert/opencti.key" "$BASE_DIR/cert/opencti.crt" "$OUTPUT_DIR/cert/"
 fi
 chmod 600 "$OUTPUT_DIR/cert/opencti.key"
 chmod 644 "$OUTPUT_DIR/cert/opencti.crt"
-ok "SSL cert → output/cert/ (key + crt)"
 
-ok "Tất cả files đã copy vào output/"
-
-# ══════════════════════════════════════════════════════════════
-# STEP 9: Tạo archive cuối cùng
-# ══════════════════════════════════════════════════════════════
-info 9 "Tạo archive cuối cùng"
 ARCHIVE_DIR="/tmp/opencti-deploy"
 rm -rf "$ARCHIVE_DIR" && cp -a "$OUTPUT_DIR" "$ARCHIVE_DIR"
 cd /tmp && tar -czf "$BASE_DIR/opencti-offline-deploy.tar.gz" opencti-deploy/
 rm -rf "$ARCHIVE_DIR"
+ok "Tạo archive xong"
 
-# ══════════════════════════════════════════════════════════════
-# KẾT QUẢ
 # ══════════════════════════════════════════════════════════════
 echo ""
 echo "══════════════════════════════════════════════════════════════"
 echo "  BUILD HOÀN THÀNH"
 echo "══════════════════════════════════════════════════════════════"
 echo ""
-echo "  📦 Archive: opencti-offline-deploy.tar.gz"
-echo "     Size:    $(du -h "$BASE_DIR/opencti-offline-deploy.tar.gz" | cut -f1)"
+echo "  📦 $(du -h "$BASE_DIR/opencti-offline-deploy.tar.gz" | cut -f1)  opencti-offline-deploy.tar.gz"
 echo ""
-echo "  📁 Nội dung archive:"
-echo "     files/"
-echo "       opencti.tar.gz              $(du -h "$OUTPUT_DIR/files/opencti.tar.gz" 2>/dev/null | cut -f1) — Platform (Node.js + native module rebuilt)"
-echo "       opencti-worker.tar.gz       $(du -h "$OUTPUT_DIR/files/opencti-worker.tar.gz" 2>/dev/null | cut -f1) — Worker (Python + wheels)"
-echo "       python312.tar.gz            $(du -h "$OUTPUT_DIR/files/python312.tar.gz" 2>/dev/null | cut -f1) — Python 3.12.8 compiled"
-echo "       elasticsearch-*.tar.gz      $(du -h "$OUTPUT_DIR"/files/elasticsearch-*.tar.gz 2>/dev/null | cut -f1) — Elasticsearch 8.17.0"
-echo "       rabbitmq-server-*.tar.xz    $(du -h "$OUTPUT_DIR"/files/rabbitmq-server-*.tar.xz 2>/dev/null | cut -f1) — RabbitMQ 4.1.0"
-echo "       minio                       $(du -h "$OUTPUT_DIR/files/minio" 2>/dev/null | cut -f1) — MinIO server"
-echo "       mc                          $(du -h "$OUTPUT_DIR/files/mc" 2>/dev/null | cut -f1) — MinIO client"
-echo "     rpm/                          $(ls "$OUTPUT_DIR"/rpm/*.rpm 2>/dev/null | wc -l) RPM packages"
-echo "     config/                       $(ls "$OUTPUT_DIR"/config/ 2>/dev/null | wc -l) config files"
-echo "     scripts/                      deploy-offline.sh, uninstall-opencti.sh"
+echo "  📁 files/"
+echo "       opencti.tar.gz              $(du -h "$OUTPUT_DIR/files/opencti.tar.gz" 2>/dev/null | cut -f1)"
+echo "       opencti-worker.tar.gz       $(du -h "$OUTPUT_DIR/files/opencti-worker.tar.gz" 2>/dev/null | cut -f1)"
+echo "       python312.tar.gz            $(du -h "$OUTPUT_DIR/files/python312.tar.gz" 2>/dev/null | cut -f1)"
+echo "     rpm/  $(ls "$OUTPUT_DIR"/rpm/*.rpm 2>/dev/null | wc -l) RPMs"
 echo ""
-echo "  🚀 Deploy trên máy đích (Rocky Linux 9):"
-echo "     tar -xzf opencti-offline-deploy.tar.gz"
+echo "  🚀 Deploy: tar -xzf opencti-offline-deploy.tar.gz"
 echo "     cd opencti-deploy && bash scripts/deploy-offline.sh"
 echo ""

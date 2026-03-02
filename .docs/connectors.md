@@ -19,9 +19,9 @@ https://www.gartner.com/en
 |  2  | **NVD / NIST (CVE Feeds)** | CVE, CPE, CVSS | ✅ Có | External Import | Có connector chính thức ingest CVE/NVD → STIX. |
 |  3  | **AlienVault OTX** | IOCs, pulses | ✅ Có | External Import | Có connector chính thức. Cần API key OTX. |
 |  4  | **Shodan** | Dữ liệu scan IP, port, banner, SSL | ✅ Có | Internal Enrichment | Dùng để enrich IP/domain đã có trong OpenCTI (không ingest bulk feed). |
-|  5  | **Kryptoslogic Telltale**  | Exposed credentials, threat data | ❌ Không chính thức | Custom | Cần API + tự viết connector nếu muốn ingest. |
+|  5  | **Kryptoslogic Telltale** (botnet)  | Exposed credentials, threat data | ❌ Không chính thức | Custom | Cần API + tự viết connector nếu muốn ingest. |
 |  6  | **SOCRadar** | Threat intel, dark web, brand monitoring | ❌ Không chính thức | Custom | Có API/STIX nhưng cần build connector riêng hoặc import STIX thủ công. |
-
+| 7 | **Maltrail** | Network-based threat detection (malicious IP/domain, traffic patterns) | ❌ Không chính thức | Custom | Không phải nguồn TI thuần (feed CTI đầy đủ), mà là IDS nhẹ phát hiện traffic độc hại. Có thể export log/JSON để ingest vào OpenCTI, nhưng cần build connector riêng hoặc pipeline qua Logstash/Elastic. |
 
 
 # Planing
