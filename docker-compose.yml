@@ -458,6 +458,33 @@ services:
       opencti:
         condition: service_healthy
 
+  # docker compose down connector-socradar
+  # docker compose up -d connector-socradar
+  connector-socradar:
+    image: opencti/connector-socradar:${OPENCTI_VERSION}
+    container_name: connector-socradar
+    environment:
+      # ===== OpenCTI Core =====
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+
+      # ===== Connector Config =====
+      - CONNECTOR_ID=${CONNECTOR_SOCRADAR_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=SOCRadar
+      - CONNECTOR_SCOPE=socradar
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=PT10M
+
+      # ===== SOCRadar Config =====
+      - RADAR_BASE_FEED_URL=https://platform.socradar.com/api/threat/intelligence/feed_list/
+      - RADAR_SOCRADAR_KEY=${SOCRADAR_API_KEY}
+      - 'RADAR_FEED_LISTS=${SOCRADAR_FEED_LISTS}'
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
 volumes:
   esdata:
   s3data:
