@@ -405,6 +405,34 @@ services:
       opencti:
         condition: service_healthy
 
+  # docker compose down connector-cpe
+  # docker compose up -d connector-cpe
+  # Import CPE (Software) từ NVD → tạo quan hệ Software --has--> Vulnerability với CVE
+  # Lần đầu sync full (~1M+ entries, mất nhiều giờ), sau đó chỉ sync thay đổi
+  connector-cpe:
+    image: opencti/connector-cpe:${OPENCTI_VERSION}
+    container_name: connector-cpe
+    environment:
+      # ===== OpenCTI Core =====
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+
+      # ===== Connector Config =====
+      - CONNECTOR_ID=${CONNECTOR_CPE_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=Common Platform Enumeration
+      - CONNECTOR_SCOPE=software
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=PT6H
+
+      # ===== CPE / NVD Config (dùng chung API key với CVE connector) =====
+      - CPE_BASE_URL=https://services.nvd.nist.gov/rest/json/cpes/2.0
+      - CPE_API_KEY=${NVD_API_KEY}
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
   # docker compose down connector-shodan
   # docker compose up -d connector-shodan
   connector-shodan:
