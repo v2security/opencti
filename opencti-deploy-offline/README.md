@@ -1,4 +1,9 @@
 # OpenCTI Offline Deployment
+/etc/saids/program/configs
+/etc/saids/application/ source_code
+
+/var/log/v2_ti/*.log
+
 
 Đóng gói + cài đặt OpenCTI 6.9.22 (EE) trên Rocky Linux 9 — **không cần Docker, không cần internet** trên máy đích.
 

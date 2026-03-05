@@ -22,13 +22,13 @@ Dockerfile hiện tại build **toàn bộ** (frontend + backend) từ source co
 │ Bước 0: Patch source TRƯỚC khi build                    │
 │                                                         │
 │   ./patch_ee.sh      (hoặc make patch)                  │
-│   → Sửa ee.ts + licensing.ts trực tiếp trên source     │
+│   → Sửa ee.ts + licensing.ts trực tiếp trên source      │
 │   → Source trong git bị thay đổi (revert bằng --revert) │
 └────────────────────┬────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────── docker compose build opencti ────────────┐
-│                  (hoặc make build)                       │
+│                  (hoặc make build)                      │
 │                                                         │
 │  Stage 1: graphql-deps (node:22-alpine)                 │
 │  └── yarn install → node_modules cho runtime            │

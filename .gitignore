@@ -31,4 +31,5 @@ Dockerfile.patch
 opencti-deploy-offline/rpm
 opencti-deploy-offline/files
 opencti-deploy-offline/output
+.docs/data/nvdcve-2.0-2025.json
 opencti-deploy-offline/opencti-offline-deploy.tar.gz
