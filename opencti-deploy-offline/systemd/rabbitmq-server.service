@@ -1,0 +1,28 @@
+[Unit]
+Description=RabbitMQ Server
+Documentation=https://www.rabbitmq.com/documentation.html
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=HOME=/root
+
+ExecStart=/opt/infra/scripts/run_rabbitmq.sh
+ExecStop=/opt/rabbitmq/sbin/rabbitmqctl shutdown
+
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=120
+LimitNOFILE=32768
+LimitNPROC=4096
+
+# Logging → journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rabbitmq
+
+[Install]
+WantedBy=multi-user.target

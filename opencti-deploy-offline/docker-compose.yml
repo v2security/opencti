@@ -1,56 +1,62 @@
 ###############################################################################
-# Docker Compose — Test offline deployment trên Rocky Linux 9
+# Docker Compose — Test Infrastructure trên Rocky Linux 9
 #
-# Container giả lập máy đích bare-metal Rocky 9 (KHÔNG có Docker).
-# Sau khi up, chạy deploy-offline.sh để cài toàn bộ từ offline package.
-#
-# Mount paths:
-#   ./output  →  /root/opencti-deploy    (package files — giống máy đích sau tar -xzf)
-#
-# Máy triển khai thật: Rocky 9, systemd, RPM, tarball — KHÔNG Docker.
-# File này chỉ dùng để TEST trước khi deploy thật.
+# Mount:
+#   ./files/   → /root/opencti-deploy/files      (MinIO binary, Redis source, RabbitMQ tarball)
+#   ./rpm/     → /root/opencti-deploy/rpm         (Erlang RPM, system deps)
+#   ./scripts/ → /root/opencti-deploy/infra/scripts   (run_minio.sh, run_redis.sh, run_rabbitmq.sh)
+#   ./systemd/ → /root/opencti-deploy/infra/systemd   (*.service files)
+#   ./scripts/setup_infra.sh → /root/opencti-deploy/infra/setup_infra.sh
+#   ./config/redis.conf        → /etc/redis/redis.conf
+#   ./config/minio.conf        → /etc/minio/minio.conf
+#   ./config/rabbitmq.conf     → /etc/rabbitmq/rabbitmq.conf
+#   ./config/rabbitmq-env.conf → /etc/rabbitmq/rabbitmq-env.conf
+#   ./config/enabled_plugins   → /opt/rabbitmq/etc/rabbitmq/enabled_plugins
 #
 # Usage:
-#   make test             # Full: build + deploy + status
-#   make build && make up # Start container
-#   make deploy           # Chạy deploy-offline.sh
-#   make status           # Kiểm tra services
-#   make exec             # Shell vào container
-#   make destroy          # Xóa tất cả
+#   cd opencti-deploy-offline
+#   docker compose up -d                          # Start Rocky 9 container
+#   docker exec opencti-infra-test bash /root/opencti-deploy/infra/setup_infra.sh
+#   docker exec opencti-infra-test systemctl status redis minio rabbitmq-server
+#
+# Hoặc dùng Makefile:
+#   make build up deploy status
 ###############################################################################
 
 services:
-  rocky9:
+  rocky9-infra:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: opencti-rocky9-test
-    hostname: opencti-test
-    privileged: true                     # Cần cho systemd + sysctl
-    cgroup: host                         # cgroup v2 — cần cho systemd trong container
+    container_name: opencti-infra-test
+    hostname: infra-test
+    privileged: true
+    cgroup: host
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
-      # Mount output/ → /root/opencti-deploy
-      # Giống hệt máy đích: tar -xzf opencti-offline-deploy.tar.gz → opencti-deploy/
-      - ./output:/root/opencti-deploy:rw
-      # Persist data giữa các lần test (không cần re-deploy)
-      - opt-data:/opt                    # ES, RabbitMQ, MinIO, OpenCTI, Python, Worker
-      - var-lib-data:/var/lib            # ES data, RabbitMQ mnesia, MinIO data, Redis
-      - var-log-data:/var/log            # All logs under /var/log/v2-ti/
-      - etc-data:/etc                    # Config: opencti, elasticsearch, rabbitmq
+      # ── Source files (read-only) ────────────────────────────
+      - ./files:/root/opencti-deploy/files:ro
+      - ./rpm:/root/opencti-deploy/rpm:ro
+      # ── Infra scripts + systemd (read-only) ────────────────
+      - ./scripts:/root/opencti-deploy/infra/scripts:ro
+      - ./systemd:/root/opencti-deploy/infra/systemd:ro
+      - ./scripts/setup_infra.sh:/root/opencti-deploy/infra/setup_infra.sh:ro
+      # ── Config (start.sh chứa biến env) ─────────────────
+      - ./config:/root/opencti-deploy/config:ro
+      # ── Service configs (mount trực tiếp vào đúng path) ────
+      - ./config/redis.conf:/etc/redis/redis.conf:ro
+      - ./config/minio.conf:/etc/minio/minio.conf:ro
+      - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./config/rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
+      - ./config/enabled_plugins:/opt/rabbitmq/etc/rabbitmq/enabled_plugins:ro
     ports:
-      - "18443:8443"                      # OpenCTI HTTPS
-      - "19200:9200"                      # Elasticsearch
-      - "25672:15672"                     # RabbitMQ Management
-      - "19001:9001"                      # MinIO Console
+      - "16379:6379"      # Redis
+      - "19000:9000"      # MinIO API
+      - "19001:9001"      # MinIO Console
+      - "15672:5672"      # RabbitMQ AMQP
+      - "25672:15672"     # RabbitMQ Management
     environment:
       - container=docker
-    mem_limit: 12g
-    stop_grace_period: 30s
+    mem_limit: 4g
+    stop_grace_period: 15s
     restart: unless-stopped
-
-volumes:
-  opt-data:
-  var-lib-data:
-  var-log-data:
-  etc-data:

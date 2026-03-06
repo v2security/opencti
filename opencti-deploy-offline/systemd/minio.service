@@ -1,0 +1,27 @@
+[Unit]
+Description=MinIO Object Storage
+Documentation=https://min.io/docs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+ExecStart=/opt/infra/scripts/run_minio.sh
+
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+# Ensure log directory exists
+ExecStartPre=/bin/mkdir -p /var/log/minio
+
+# Logging → /var/log/minio/
+StandardOutput=append:/var/log/minio/minio.log
+StandardError=append:/var/log/minio/minio.log
+SyslogIdentifier=minio
+
+[Install]
+WantedBy=multi-user.target

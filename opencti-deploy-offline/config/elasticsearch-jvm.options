@@ -1,9 +1,0 @@
-# ═══════════════════════════════════════════════════════════════
-# Elasticsearch JVM options — OpenCTI offline deployment
-# Deploy to: /etc/elasticsearch/jvm.options.d/opencti.options
-# ═══════════════════════════════════════════════════════════════
-
-# Heap size — điều chỉnh theo RAM máy đích
-# Khuyến nghị: 50% RAM, tối đa 31g
--Xms6g
--Xmx6g
