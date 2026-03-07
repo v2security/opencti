@@ -18,14 +18,15 @@
 COMPOSE   := docker compose
 CONTAINER := opencti-test
 
-.PHONY: pack test test-infra status exec destroy destroy-pack help
+.PHONY: pack pack-infra test test-infra status exec destroy destroy-pack help
 .DEFAULT_GOAL := help
 
 help:
 	@echo ""
 	@echo "  OpenCTI Offline Deploy"
 	@echo "  ====================================="
-	@echo "  make pack            Pack app"
+	@echo "  make pack            Pack app (opencti-app-package.tar.gz)"
+	@echo "  make pack-infra      Pack infra (opencti-infra-package.tar.gz)"
 	@echo "  make test            Full stack test"
 	@echo "  make test-infra      Infra only test"
 	@echo "  make status          Service status"
@@ -38,6 +39,9 @@ help:
 
 pack:
 	bash scripts/pack_app.sh
+
+pack-infra:
+	bash scripts/pack_infra.sh
 
 # -- Test (Docker) ---
 
@@ -80,6 +84,7 @@ destroy:
 destroy-pack:
 	@echo "Will delete: pack outputs + build dirs"
 	@echo "  files/opencti-app-package.tar.gz"
+	@echo "  files/opencti-infra-package.tar.gz"
 	@echo "  files/opencti-source.tar.gz"
 	@echo "  files/python-deps.tar.gz"
 	@echo "  files/python312.tar.gz"
@@ -87,7 +92,7 @@ destroy-pack:
 	@echo "  opencti-graphql/build/"
 	@echo "  opencti-front/builder/prod/build/"
 	@read -p "Confirm? [y/N] " ans && [ "$$ans" = "y" ] || exit 1
-	rm -f files/opencti-app-package.tar.gz files/opencti-source.tar.gz files/python-deps.tar.gz
+	rm -f files/opencti-app-package.tar.gz files/opencti-infra-package.tar.gz files/opencti-source.tar.gz files/python-deps.tar.gz
 	rm -f files/python312.tar.gz files/nodejs22.tar.gz
 	rm -rf ../opencti-platform/opencti-graphql/build
 	rm -rf ../opencti-platform/opencti-front/builder/prod/build
