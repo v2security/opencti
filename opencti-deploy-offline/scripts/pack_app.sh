@@ -58,8 +58,8 @@ info() { echo ""; echo "═══ [$1/7] $2 ═══"; }
 
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
-echo "║  PACK — Offline Deploy Package                  ║"
-echo "║  Output: files/$OUTPUT     ║"
+echo "║  PACK — Offline Deploy Package                   ║"
+echo "║  Output: files/$OUTPUT        ║"
 echo "╚══════════════════════════════════════════════════╝"
 
 TOTAL_START=$(date +%s)

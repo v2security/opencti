@@ -6,38 +6,39 @@
 # Elasticsearch chạy container riêng (đã có sẵn).
 #
 # Usage:
-#   make pack            # Pack OpenCTI source + deps
-#   make test            # Full: pack + build + deploy infra + app + status
-#   make test-infra      # Infra only: build + deploy infra + status
-#   make status          # Service status
-#   make exec            # Shell vào container
-#   make destroy         # Xóa tất cả containers
+#   make pack-app            # Pack OpenCTI source + deps
+#   make pack-infra          # Pack infrastructure files
+#   make test                # Full: pack + build + deploy infra + app + status
+#   make test-infra          # Infra only: build + deploy infra + status
+#   make status              # Service status
+#   make exec                # Shell vào container
+#   make destroy             # Xóa tất cả containers
 #   make destroy-pack    # Xóa build artifacts
 # ══════════════════════════════════════════════════════════════
 
 COMPOSE   := docker compose
 CONTAINER := opencti-test
 
-.PHONY: pack pack-infra test test-infra status exec destroy destroy-pack help
+.PHONY: pack-app pack-infra test test-infra status exec destroy destroy-pack help
 .DEFAULT_GOAL := help
 
 help:
 	@echo ""
 	@echo "  OpenCTI Offline Deploy"
 	@echo "  ====================================="
-	@echo "  make pack            Pack app (opencti-app-package.tar.gz)"
-	@echo "  make pack-infra      Pack infra (opencti-infra-package.tar.gz)"
-	@echo "  make test            Full stack test"
-	@echo "  make test-infra      Infra only test"
-	@echo "  make status          Service status"
-	@echo "  make exec            Shell into container"
-	@echo "  make destroy         Remove all containers"
-	@echo "  make destroy-package Remove build artifacts"
+	@echo "  make pack-app            Pack app (opencti-app-package.tar.gz)"
+	@echo "  make pack-infra          Pack infra (opencti-infra-package.tar.gz)"
+	@echo "  make test                Full stack test"
+	@echo "  make test-infra          Infra only test"
+	@echo "  make status              Service status"
+	@echo "  make exec                Shell into container"
+	@echo "  make destroy             Remove all containers"
+	@echo "  make destroy-pack        Remove build artifacts"
 	@echo ""
 
 # -- Pack (on build machine) ---
 
-pack:
+pack-app:
 	bash scripts/pack_app.sh
 
 pack-infra:
@@ -45,7 +46,7 @@ pack-infra:
 
 # -- Test (Docker) ---
 
-test: pack
+test: pack-app pack-infra
 	$(COMPOSE) build
 	$(COMPOSE) up -d
 	@sleep 5

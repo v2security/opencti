@@ -12,13 +12,24 @@
 #   files/rabbitmq-server-generic-unix-*.tar.xz     RabbitMQ tarball
 #   rpm/*.rpm                                       Erlang + system deps
 #   scripts/setup_infra.sh                          Main setup script
+#   scripts/setup_app.sh                            App setup script
+#   scripts/stop-infra.sh                           Infra cleanup script
+#   scripts/stop-app.sh                             App cleanup script
 #   scripts/run_minio.sh                            MinIO run script
 #   scripts/run_redis.sh                            Redis run script
 #   scripts/run_rabbitmq.sh                         RabbitMQ run script
 #   systemd/minio.service                           MinIO systemd unit
 #   systemd/redis.service                           Redis systemd unit
 #   systemd/rabbitmq-server.service                 RabbitMQ systemd unit
+#   systemd/opencti-platform.service                Platform systemd unit
+#   systemd/opencti-worker@.service                 Worker template unit
 #   config/start.sh                                 Env vars (REDIS__, MINIO__, RABBITMQ__)
+#   config/start-worker.sh                          Worker env vars + start
+#   config/90-opencti.conf                          Sysctl tuning
+#   config/opencti-logrotate.conf                   Logrotate config
+#   config/elasticsearch.yml                        Elasticsearch config
+#   cert/opencti.key                                SSL private key
+#   cert/opencti.crt                                SSL certificate
 #   config/redis.conf                               Redis config
 #   config/minio.conf                               MinIO config
 #   config/rabbitmq.conf                            RabbitMQ config
@@ -54,8 +65,8 @@ ERRORS=0
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  PACK INFRA — Offline Infrastructure Package            ║"
-echo "║  Output: files/$OUTPUT              ║"
+echo "║  PACK INFRA — Offline Infrastructure Package             ║"
+echo "║  Output: files/$OUTPUT                                   ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 
 START_TIME=$(date +%s)
@@ -121,21 +132,27 @@ if [[ -n "$WARN_PKGS" ]]; then
 fi
 
 # --- scripts/ ---
-for f in setup_infra.sh run_minio.sh run_redis.sh run_rabbitmq.sh; do
+for f in setup_infra.sh setup_app.sh stop-infra.sh stop-app.sh run_minio.sh run_redis.sh run_rabbitmq.sh; do
     [[ -f "$BASE_DIR/scripts/$f" ]] || { log "✗" "Missing: scripts/$f"; ERRORS=$((ERRORS + 1)); }
     log "✓" "scripts/$f"
 done
 
 # --- systemd/ ---
-for f in minio.service redis.service rabbitmq-server.service; do
+for f in minio.service redis.service rabbitmq-server.service opencti-platform.service opencti-worker@.service; do
     [[ -f "$BASE_DIR/systemd/$f" ]] || { log "✗" "Missing: systemd/$f"; ERRORS=$((ERRORS + 1)); }
     log "✓" "systemd/$f"
 done
 
 # --- config/ ---
-for f in start.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins; do
+for f in start.sh start-worker.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins 90-opencti.conf opencti-logrotate.conf elasticsearch.yml; do
     [[ -f "$BASE_DIR/config/$f" ]] || { log "✗" "Missing: config/$f"; ERRORS=$((ERRORS + 1)); }
     log "✓" "config/$f"
+done
+
+# --- cert/ ---
+for f in opencti.key opencti.crt; do
+    [[ -f "$BASE_DIR/cert/$f" ]] || { log "✗" "Missing: cert/$f"; ERRORS=$((ERRORS + 1)); }
+    log "✓" "cert/$f"
 done
 
 if [[ "$ERRORS" -gt 0 ]]; then
@@ -148,7 +165,7 @@ fi
 info 2 "Prepare staging directory"
 
 rm -rf "$STAGING"
-mkdir -p "$STAGING"/{files,rpm,scripts,systemd,config}
+mkdir -p "$STAGING"/{files,rpm,scripts,systemd,config,cert}
 log "→" "Staging: $STAGING"
 
 # ═════════════════════════════════════════════════════════════
@@ -176,23 +193,29 @@ cp "$RPM_DIR"/*.rpm "$STAGING/rpm/"
 log "→" "rpm/ ($RPM_COUNT RPMs)"
 
 # scripts/
-for f in setup_infra.sh run_minio.sh run_redis.sh run_rabbitmq.sh; do
+for f in setup_infra.sh setup_app.sh stop-infra.sh stop-app.sh run_minio.sh run_redis.sh run_rabbitmq.sh; do
     cp "$BASE_DIR/scripts/$f" "$STAGING/scripts/"
 done
 chmod +x "$STAGING/scripts/"*.sh
-log "→" "scripts/ (4 files)"
+log "→" "scripts/ (7 files)"
 
 # systemd/
-for f in minio.service redis.service rabbitmq-server.service; do
+for f in minio.service redis.service rabbitmq-server.service opencti-platform.service opencti-worker@.service; do
     cp "$BASE_DIR/systemd/$f" "$STAGING/systemd/"
 done
-log "→" "systemd/ (3 files)"
+log "→" "systemd/ (5 files)"
 
 # config/
-for f in start.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins; do
+for f in start.sh start-worker.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins 90-opencti.conf opencti-logrotate.conf elasticsearch.yml; do
     cp "$BASE_DIR/config/$f" "$STAGING/config/"
 done
-log "→" "config/ (6 files)"
+log "→" "config/ (10 files)"
+
+# cert/
+for f in opencti.key opencti.crt; do
+    cp "$BASE_DIR/cert/$f" "$STAGING/cert/"
+done
+log "→" "cert/ (opencti.key, opencti.crt)"
 
 # ═════════════════════════════════════════════════════════════
 # 4. Create tarball
@@ -216,7 +239,7 @@ ELAPSED=$(( $(date +%s) - START_TIME ))
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║  ✓ PACK INFRA COMPLETE                                  ║"
+echo "║  ✓ PACK INFRA COMPLETE                                   ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 echo "  📦 Package:  files/$OUTPUT"
@@ -226,14 +249,16 @@ echo ""
 echo "  📋 Contents:"
 echo "     files/     minio, mc, redis, rabbitmq binaries/source"
 echo "     rpm/       $RPM_COUNT RPM packages (Erlang + deps)"
-echo "     scripts/   setup_infra.sh + run_*.sh"
-echo "     systemd/   minio, redis, rabbitmq services"
-echo "     config/    start.sh + service configs"
+echo "     scripts/   setup/stop infra+app, run_*.sh (7 files)"
+echo "     systemd/   minio, redis, rabbitmq, platform, worker (5 files)"
+echo "     config/    start.sh, start-worker.sh, ES, sysctl, logrotate (10 files)"
+echo "     cert/      SSL certificates (opencti.key, opencti.crt)"
 echo ""
 echo "  🚀 Deploy trên máy offline:"
 echo "     1. scp files/$OUTPUT user@offline-server:/root/"
 echo "     2. ssh user@offline-server"
 echo "     3. mkdir -p /root/opencti-deploy"
 echo "     4. tar -xzf $OUTPUT -C /root/opencti-deploy"
+echo "        (cert/ tự động được bung ra cùng package)"
 echo "     5. bash /root/opencti-deploy/scripts/setup_infra.sh"
 echo ""

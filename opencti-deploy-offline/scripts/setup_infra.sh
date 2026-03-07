@@ -167,8 +167,8 @@ info 2 "Install RPM dependencies (Erlang + system libs)"
 if [[ -d "$RPM_DIR" ]] && ls "$RPM_DIR"/*.rpm &>/dev/null 2>&1; then
     detail "Source: $RPM_DIR/*.rpm"
     cd "$RPM_DIR"
-    dnf localinstall -y --allowerasing *.rpm 2>&1 | tail -3 || \
-        rpm -Uvh --force --nodeps *.rpm 2>&1 | tail -3 || true
+    dnf localinstall -y --allowerasing --nobest --skip-broken *.rpm 2>&1 | tail -5 || \
+        rpm -Uvh --force --nodeps *.rpm 2>&1 | tail -5 || true
     ok "RPMs installed ($(ls *.rpm | wc -l) packages)"
 else
     warn "No RPM directory found at $RPM_DIR — skipping"

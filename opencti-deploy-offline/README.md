@@ -236,18 +236,125 @@ Ports:
 ## Makefile commands
 
 ```bash
-make pack              # Pack ALL → files/opencti-app-package.tar.gz
-make build-python      # Build Python 3.12 runtime (Docker)
-make build-nodejs      # Download Node.js 22 pre-built binary
-make copy-source       # Copy OpenCTI source code
-make download-deps     # Download Python packages
+#   make pack            # Pack OpenCTI source + deps
+#   make test            # Full: pack + build + deploy infra + app + status
+#   make test-infra      # Infra only: build + deploy infra + status
+#   make status          # Service status
+#   make exec            # Shell vào container
+#   make destroy         # Xóa tất cả containers
+#   make destroy-pack    # Xóa build artifacts
+```
 
-make test              # Test Part 1 (infra) trong Docker
-make test-all          # Test full stack (infra + app) trong Docker
-make deploy            # Chạy setup_infra.sh trong test container
-make deploy-app        # Chạy setup_app.sh trong test container
-make status            # Kiểm tra tất cả services
-make logs              # Xem logs
-make exec              # Shell vào test container
-make destroy           # Xóa tất cả test resources
+## RPM Dependencies
+```bash
+[master@rocky8 rpm]$ tree .
+
+├── acl-2.3.1-4.el9.x86_64.rpm
+├── alternatives-1.24-2.el9.x86_64.rpm
+├── audit-libs-3.1.5-7.el9.x86_64.rpm
+├── basesystem-11-13.el9.0.1.noarch.rpm
+├── bash-5.1.8-9.el9.x86_64.rpm
+├── binutils-2.35.2-67.el9_7.1.x86_64.rpm
+├── bzip2-libs-1.0.8-10.el9_5.x86_64.rpm
+├── ca-certificates-2025.2.80_v9.0.305-91.el9.noarch.rpm
+├── coreutils-8.32-39.el9.x86_64.rpm
+├── coreutils-common-8.32-39.el9.x86_64.rpm
+├── cpp-11.5.0-11.el9.x86_64.rpm
+├── cracklib-2.9.6-27.el9.x86_64.rpm
+├── cracklib-dicts-2.9.6-27.el9.x86_64.rpm
+├── crypto-policies-20250905-1.git377cc42.el9.noarch.rpm
+├── curl-7.76.1-35.el9_7.3.x86_64.rpm
+├── dbus-1.12.20-8.el9.x86_64.rpm
+├── dbus-broker-28-7.el9.x86_64.rpm
+├── dbus-common-1.12.20-8.el9.noarch.rpm
+├── erlang-27.2.4-1.el9.x86_64.rpm
+├── expat-2.5.0-5.el9_7.1.x86_64.rpm
+├── filesystem-3.16-5.el9.x86_64.rpm
+├── findutils-4.8.0-7.el9.x86_64.rpm
+├── gawk-5.1.0-6.el9.x86_64.rpm
+├── gawk-all-langpacks-5.1.0-6.el9.x86_64.rpm
+├── gcc-11.5.0-11.el9.x86_64.rpm
+├── gcc-c++-11.5.0-11.el9.x86_64.rpm
+├── glibc-2.34-231.el9_7.10.x86_64.rpm
+├── glibc-common-2.34-231.el9_7.10.x86_64.rpm
+├── glibc-devel-2.34-231.el9_7.10.x86_64.rpm
+├── glibc-gconv-extra-2.34-231.el9_7.10.x86_64.rpm
+├── glibc-headers-2.34-231.el9_7.10.x86_64.rpm
+├── glibc-langpack-en-2.34-231.el9_7.10.x86_64.rpm
+├── glibc-minimal-langpack-2.34-231.el9_7.10.x86_64.rpm
+├── gmp-6.2.0-13.el9.x86_64.rpm
+├── grep-3.6-5.el9.x86_64.rpm
+├── gzip-1.12-1.el9.x86_64.rpm
+├── hostname-3.23-6.el9.x86_64.rpm
+├── iproute-6.14.0-2.el9.x86_64.rpm
+├── isl-0.16.1-15.el9.x86_64.rpm
+├── kernel-headers-5.14.0-611.36.1.el9_7.x86_64.rpm
+├── kmod-libs-28-11.el9.x86_64.rpm
+├── libacl-2.3.1-4.el9.x86_64.rpm
+├── libattr-2.5.1-3.el9.x86_64.rpm
+├── libblkid-2.37.4-21.el9.x86_64.rpm
+├── libcap-2.48-10.el9.x86_64.rpm
+├── libcap-ng-0.8.2-7.el9.x86_64.rpm
+├── libdb-5.3.28-57.el9_6.x86_64.rpm
+├── libeconf-0.4.1-4.el9.x86_64.rpm
+├── libfdisk-2.37.4-21.el9.x86_64.rpm
+├── libffi-3.4.2-8.el9.x86_64.rpm
+├── libgcc-11.5.0-11.el9.x86_64.rpm
+├── libgcrypt-1.10.0-11.el9.x86_64.rpm
+├── libgpg-error-1.42-5.el9.x86_64.rpm
+├── libmount-2.37.4-21.el9.x86_64.rpm
+├── libmpc-1.2.1-4.el9.x86_64.rpm
+├── libnsl2-2.0.0-1.el9.0.1.x86_64.rpm
+├── libpwquality-1.4.4-8.el9.x86_64.rpm
+├── libseccomp-2.5.2-2.el9.x86_64.rpm
+├── libselinux-3.6-3.el9.x86_64.rpm
+├── libsemanage-3.6-5.el9_6.x86_64.rpm
+├── libsepol-3.6-3.el9.x86_64.rpm
+├── libsigsegv-2.13-4.el9.x86_64.rpm
+├── libsmartcols-2.37.4-21.el9.x86_64.rpm
+├── libstdc++-devel-11.5.0-11.el9.x86_64.rpm
+├── libtasn1-4.16.0-9.el9.x86_64.rpm
+├── libtirpc-1.3.3-9.el9.x86_64.rpm
+├── libutempter-1.2.1-6.el9.x86_64.rpm
+├── libuuid-2.37.4-21.el9.x86_64.rpm
+├── libxcrypt-4.4.18-3.el9.x86_64.rpm
+├── libxcrypt-compat-4.4.18-3.el9.x86_64.rpm
+├── libxcrypt-devel-4.4.18-3.el9.x86_64.rpm
+├── libzstd-1.5.5-1.el9.x86_64.rpm
+├── lz4-libs-1.9.3-5.el9.x86_64.rpm
+├── make-4.3-8.el9.x86_64.rpm
+├── mpfr-4.1.0-7.el9.x86_64.rpm
+├── ncurses-base-6.2-12.20210508.el9.noarch.rpm
+├── ncurses-libs-6.2-12.20210508.el9.x86_64.rpm
+├── openssl-3.5.1-7.el9_7.x86_64.rpm
+├── openssl-fips-provider-3.5.1-7.el9_7.x86_64.rpm
+├── openssl-libs-3.5.1-7.el9_7.x86_64.rpm
+├── p11-kit-0.25.3-3.el9_5.x86_64.rpm
+├── p11-kit-trust-0.25.3-3.el9_5.x86_64.rpm
+├── pam-1.5.1-26.el9_6.x86_64.rpm
+├── pcre2-10.40-6.el9.x86_64.rpm
+├── pcre2-syntax-10.40-6.el9.noarch.rpm
+├── pcre-8.44-4.el9.x86_64.rpm
+├── popt-1.18-8.el9.x86_64.rpm
+├── procps-ng-3.3.17-14.el9.x86_64.rpm
+├── readline-8.1-4.el9.x86_64.rpm
+├── rocky-gpg-keys-9.7-1.4.el9.noarch.rpm
+├── rocky-release-9.7-1.4.el9.noarch.rpm
+├── rocky-repos-9.7-1.4.el9.noarch.rpm
+├── sed-4.8-9.el9.x86_64.rpm
+├── setup-2.13.7-10.el9.noarch.rpm
+├── shadow-utils-4.9-15.el9.x86_64.rpm
+├── systemd-252-55.el9_7.7.rocky.0.1.x86_64.rpm
+├── systemd-libs-252-55.el9_7.7.rocky.0.1.x86_64.rpm
+├── systemd-pam-252-55.el9_7.7.rocky.0.1.x86_64.rpm
+├── systemd-rpm-macros-252-55.el9_7.7.rocky.0.1.noarch.rpm
+├── tar-1.34-9.el9_7.x86_64.rpm
+├── tzdata-2025c-1.el9.noarch.rpm
+├── util-linux-2.37.4-21.el9.x86_64.rpm
+├── util-linux-core-2.37.4-21.el9.x86_64.rpm
+├── which-2.21-30.el9_6.x86_64.rpm
+├── xz-libs-5.2.5-8.el9_0.x86_64.rpm
+└── zlib-1.2.11-40.el9.x86_64.rpm
+
+0 directories, 106 files
 ```

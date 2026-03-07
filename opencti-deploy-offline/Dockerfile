@@ -31,22 +31,17 @@ RUN SYSD=/usr/lib/systemd/system; \
     rm -f "$SYSD"/basic.target.wants/* && \
     rm -f "$SYSD"/anaconda.target.wants/* 2>/dev/null || true
 
-# ── Tools cơ bản + build dependencies cho Redis 8.x compilation ──
-# Redis 8.x cần gcc-c++ (fast_float library dùng C++)
-RUN dnf install -y --allowerasing \
-        procps-ng \
-        iproute \
-        net-tools \
-        hostname \
-        tar \
-        gzip \
-        xz \
-        which \
-        vim-minimal \
-        curl \
-        findutils \
-        make \
-    && dnf clean all
+# ── Minimal packages — bắt buộc để container hoạt động ───────
+# systemd: boot với /usr/sbin/init (base image không có)
+# xz:      extract .tar.xz (base image chỉ có xz-libs, không có binary)
+RUN dnf install -y systemd xz && dnf clean all
+
+# ── Packages ─────────────────────────────────────────────────
+# Base image đã có sẵn: tar, gzip, findutils, hostname,
+# curl-minimal, vim-minimal, xz-libs, dnf.
+# Các gói còn lại (make, gcc, gcc-c++, procps-ng, iproute,
+# net-tools, which, erlang...) nằm trong rpm/ và được
+# setup_infra.sh cài offline qua dnf localinstall.
 
 # ── Node.js 22 (cho OpenCTI Platform runtime) ───────────────
 # Node.js sẽ được cài tự động từ opencti-app-package.tar.gz khi chạy setup_app.sh.
