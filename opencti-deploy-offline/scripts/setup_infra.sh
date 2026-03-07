@@ -70,12 +70,12 @@
 ###############################################################################
 set -euo pipefail
 
-DEPLOY_DIR="${DEPLOY_DIR:-/root/opencti-deploy}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DEPLOY_DIR="${DEPLOY_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FILES_DIR="$DEPLOY_DIR/files"
 RPM_DIR="$DEPLOY_DIR/rpm"
-INFRA_DIR="$DEPLOY_DIR/infra"
-SCRIPTS_SRC="$INFRA_DIR/scripts"
-SYSTEMD_SRC="$INFRA_DIR/systemd"
+SCRIPTS_SRC="$DEPLOY_DIR/scripts"
+SYSTEMD_SRC="$DEPLOY_DIR/systemd"
 START_SH="$DEPLOY_DIR/config/start.sh"
 
 INFRA_SCRIPTS_DEST="/opt/infra/scripts"
@@ -301,7 +301,9 @@ else
         make -j"$(nproc)" 2>&1 | tail -5
         make install PREFIX=/opt/redis 2>&1 | tail -3
 
-        # Cleanup source
+        # Cleanup source — MUST cd out first, otherwise cwd is deleted
+        # and subsequent commands (e.g. rabbitmqctl) fail silently
+        cd /tmp
         rm -rf "$REDIS_SRC"
 
         /opt/redis/bin/redis-server --version
@@ -403,16 +405,16 @@ wait_for "MinIO (localhost:9000)" \
     "curl -sf http://localhost:9000/minio/health/live" 15 || true
 
 wait_for "RabbitMQ (localhost:5672)" \
-    "rabbitmqctl status 2>/dev/null" 60 || true
+    "RABBITMQ_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf rabbitmqctl status 2>/dev/null" 60 || true
 
 # ── RabbitMQ: Create user + vhost (dùng biến từ start.sh) ────
-if rabbitmqctl status &>/dev/null; then
+if RABBITMQ_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf rabbitmqctl status &>/dev/null; then
     detail "Configuring RabbitMQ user and permissions..."
     detail "  User: $INFRA_RABBITMQ_USER (from start.sh RABBITMQ__USERNAME)"
-    rabbitmqctl add_user "$INFRA_RABBITMQ_USER" "$INFRA_RABBITMQ_PASSWORD" 2>/dev/null || \
-        rabbitmqctl change_password "$INFRA_RABBITMQ_USER" "$INFRA_RABBITMQ_PASSWORD" 2>/dev/null || true
-    rabbitmqctl set_user_tags "$INFRA_RABBITMQ_USER" administrator 2>/dev/null || true
-    rabbitmqctl set_permissions -p / "$INFRA_RABBITMQ_USER" ".*" ".*" ".*" 2>/dev/null || true
+    RABBITMQ_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf rabbitmqctl add_user "$INFRA_RABBITMQ_USER" "$INFRA_RABBITMQ_PASSWORD" 2>/dev/null || \
+        RABBITMQ_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf rabbitmqctl change_password "$INFRA_RABBITMQ_USER" "$INFRA_RABBITMQ_PASSWORD" 2>/dev/null || true
+    RABBITMQ_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf rabbitmqctl set_user_tags "$INFRA_RABBITMQ_USER" administrator 2>/dev/null || true
+    RABBITMQ_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf rabbitmqctl set_permissions -p / "$INFRA_RABBITMQ_USER" ".*" ".*" ".*" 2>/dev/null || true
     ok "RabbitMQ user '$INFRA_RABBITMQ_USER' configured (admin)"
 else
     warn "RabbitMQ not running — skipping user creation"

@@ -15,6 +15,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@anthropic-ai/sdk@npm:^0.39.0":
+  version: 0.39.0
+  resolution: "@anthropic-ai/sdk@npm:0.39.0"
+  dependencies:
+    "@types/node": "npm:^18.11.18"
+    "@types/node-fetch": "npm:^2.6.4"
+    abort-controller: "npm:^3.0.0"
+    agentkeepalive: "npm:^4.2.1"
+    form-data-encoder: "npm:1.7.2"
+    formdata-node: "npm:^4.3.2"
+    node-fetch: "npm:^2.6.7"
+  checksum: 10c0/f3832ccf8af33fedd4dcb459804ccbebc84fa20b93ef39df1855060d6567444aa7ae83ea8dae09ca1f719f60ddf800b168f36f10dccaa3cab5e231e8adeb3a71
+  languageName: node
+  linkType: hard
+
 "@apollo/cache-control-types@npm:^1.0.3":
   version: 1.0.3
   resolution: "@apollo/cache-control-types@npm:1.0.3"
@@ -2919,6 +2934,18 @@ __metadata:
   peerDependencies:
     jsep: ^0.4.0||^1.0.0
   checksum: 10c0/bec7eb7ea6ab453a2672edc808644c5be3dc06b2a9d77182e18cd595b37deba6dcdb3760849d8684afc5779a86b7d2604dd525cb612a548f9ed9f31a8032ec24
+  languageName: node
+  linkType: hard
+
+"@langchain/anthropic@npm:0.3.22":
+  version: 0.3.22
+  resolution: "@langchain/anthropic@npm:0.3.22"
+  dependencies:
+    "@anthropic-ai/sdk": "npm:^0.39.0"
+    fast-xml-parser: "npm:^4.4.1"
+  peerDependencies:
+    "@langchain/core": ">=0.3.58 <0.4.0"
+  checksum: 10c0/879e57833716dcbbddf2e0ed943bd1356cc0acd820852004a6cdbc44a01a4fb8015e70995a5d14ef77f1ce487027edb61b48cb2aa9b19dca7d6dfe3a48659692
   languageName: node
   linkType: hard
 
@@ -7866,6 +7893,17 @@ __metadata:
   languageName: node
   linkType: hard
 
+"fast-xml-parser@npm:^4.4.1":
+  version: 4.5.4
+  resolution: "fast-xml-parser@npm:4.5.4"
+  dependencies:
+    strnum: "npm:^1.0.5"
+  bin:
+    fxparser: src/cli/cli.js
+  checksum: 10c0/7989148650fc1fce988798b62467f7dee0fd5a7ad049373e00e65fbc68f689c119975d03da32c427f0a1f5aad01de2efbd783a48dcdaf3ca41817a8b161ad3e8
+  languageName: node
+  linkType: hard
+
 "fastq@npm:^1.6.0":
   version: 1.20.1
   resolution: "fastq@npm:1.20.1"
@@ -10702,6 +10740,7 @@ __metadata:
     "@graphql-tools/schema": "npm:10.0.31"
     "@graphql-tools/utils": "npm:11.0.0"
     "@jorgeferrero/stream-to-buffer": "npm:2.0.6"
+    "@langchain/anthropic": "npm:0.3.22"
     "@langchain/core": "npm:0.3.59"
     "@langchain/mistralai": "npm:0.2.0"
     "@langchain/openai": "npm:0.5.5"
@@ -10842,6 +10881,7 @@ __metadata:
     ws: "npm:8.19.0"
     xml2js: "npm:0.6.2"
     zod: "npm:3.25.76"
+    zod-to-json-schema: "npm:3.24.5"
   dependenciesMeta:
     es5-ext:
       built: false
@@ -12583,6 +12623,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"strnum@npm:^1.0.5":
+  version: 1.1.2
+  resolution: "strnum@npm:1.1.2"
+  checksum: 10c0/a0fce2498fa3c64ce64a40dada41beb91cabe3caefa910e467dc0518ef2ebd7e4d10f8c2202a6104f1410254cae245066c0e94e2521fb4061a5cb41831952392
+  languageName: node
+  linkType: hard
+
 "strnum@npm:^2.1.0":
   version: 2.1.2
   resolution: "strnum@npm:2.1.2"
@@ -13964,6 +14011,15 @@ __metadata:
     compress-commons: "npm:^6.0.2"
     readable-stream: "npm:^4.0.0"
   checksum: 10c0/50f2fb30327fb9d09879abf7ae2493705313adf403e794b030151aaae00009162419d60d0519e807673ec04d442e140c8879ca14314df0a0192de3b233e8f28b
+  languageName: node
+  linkType: hard
+
+"zod-to-json-schema@npm:3.24.5":
+  version: 3.24.5
+  resolution: "zod-to-json-schema@npm:3.24.5"
+  peerDependencies:
+    zod: ^3.24.1
+  checksum: 10c0/0745b94ba53e652d39f262641cdeb2f75d24339fb6076a38ce55bcf53d82dfaea63adf524ebc5f658681005401687f8e9551c4feca7c4c882e123e66091dfb90
   languageName: node
   linkType: hard
 

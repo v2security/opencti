@@ -1,62 +1,141 @@
 ###############################################################################
-# Docker Compose — Test Infrastructure trên Rocky Linux 9
+# Docker Compose — Test Infrastructure + OpenCTI trên Rocky Linux 9
+#
+# Services:
+#   1. rocky9-infra   — Rocky 9 container giả lập bare-metal
+#                       (Redis + MinIO + RabbitMQ + OpenCTI Platform + Worker)
+#   2. elasticsearch  — Elasticsearch 8.x container (đã có sẵn, chỉ mount config)
 #
 # Mount:
-#   ./files/   → /root/opencti-deploy/files      (MinIO binary, Redis source, RabbitMQ tarball)
-#   ./rpm/     → /root/opencti-deploy/rpm         (Erlang RPM, system deps)
-#   ./scripts/ → /root/opencti-deploy/infra/scripts   (run_minio.sh, run_redis.sh, run_rabbitmq.sh)
-#   ./systemd/ → /root/opencti-deploy/infra/systemd   (*.service files)
-#   ./scripts/setup_infra.sh → /root/opencti-deploy/infra/setup_infra.sh
-#   ./config/redis.conf        → /etc/redis/redis.conf
-#   ./config/minio.conf        → /etc/minio/minio.conf
-#   ./config/rabbitmq.conf     → /etc/rabbitmq/rabbitmq.conf
-#   ./config/rabbitmq-env.conf → /etc/rabbitmq/rabbitmq-env.conf
-#   ./config/enabled_plugins   → /opt/rabbitmq/etc/rabbitmq/enabled_plugins
+#   ./files/   → /root/opencti-deploy/files     (MinIO binary, Redis source, RabbitMQ tarball, OpenCTI bundle, Python runtime)
+#   ./rpm/     → /root/opencti-deploy/rpm       (Erlang RPM, system deps)
+#   ./scripts/ → /root/opencti-deploy/scripts   (run_*.sh, setup scripts)
+#   ./systemd/ → /root/opencti-deploy/systemd   (*.service files)
+#   ./config/  → /root/opencti-deploy/config    (start.sh, start-worker.sh, service configs)
+#   ./cert/    → /root/opencti-deploy/cert      (SSL certificates)
+#   ./config/elasticsearch.yml → ES config
 #
 # Usage:
 #   cd opencti-deploy-offline
-#   docker compose up -d                          # Start Rocky 9 container
-#   docker exec opencti-infra-test bash /root/opencti-deploy/infra/setup_infra.sh
-#   docker exec opencti-infra-test systemctl status redis minio rabbitmq-server
+#   docker compose up -d
+#   docker exec opencti-test bash /root/opencti-deploy/scripts/setup_infra.sh
+#   docker exec opencti-test bash /root/opencti-deploy/scripts/setup_app.sh
 #
 # Hoặc dùng Makefile:
-#   make build up deploy status
+#   make build up deploy deploy-app status
 ###############################################################################
 
 services:
+  # ── Rocky Linux 9 — giả lập bare-metal target server (no internet) ───────────
   rocky9-infra:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: opencti-infra-test
-    hostname: infra-test
+    container_name: opencti-test
+    hostname: opencti-test
     privileged: true
     cgroup: host
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
-      # ── Source files (read-only) ────────────────────────────
-      - ./files:/root/opencti-deploy/files:ro
+
+      # ── files/ — chỉ mount file cần cho deployment (bỏ build artifacts) ──
+      - ./files/minio:/root/opencti-deploy/files/minio:ro
+      - ./files/mc:/root/opencti-deploy/files/mc:ro
+      - ./files/redis-8.4.2.tar.gz:/root/opencti-deploy/files/redis-8.4.2.tar.gz:ro
+      - ./files/rabbitmq-server-generic-unix-4.2.0.tar.xz:/root/opencti-deploy/files/rabbitmq-server-generic-unix-4.2.0.tar.xz:ro
+      - ./files/opencti-app-package.tar.gz:/root/opencti-deploy/files/opencti-app-package.tar.gz:ro
+
+      # ── rpm/ — mount cả folder (tất cả ~90 RPMs đều cần cho dnf localinstall) ──
       - ./rpm:/root/opencti-deploy/rpm:ro
-      # ── Infra scripts + systemd (read-only) ────────────────
-      - ./scripts:/root/opencti-deploy/infra/scripts:ro
-      - ./systemd:/root/opencti-deploy/infra/systemd:ro
-      - ./scripts/setup_infra.sh:/root/opencti-deploy/infra/setup_infra.sh:ro
-      # ── Config (start.sh chứa biến env) ─────────────────
-      - ./config:/root/opencti-deploy/config:ro
-      # ── Service configs (mount trực tiếp vào đúng path) ────
+
+      # ── scripts/ — chỉ mount deployment scripts (bỏ build scripts 01-06, pack) ──
+      - ./scripts/setup_infra.sh:/root/opencti-deploy/scripts/setup_infra.sh:ro
+      - ./scripts/setup_app.sh:/root/opencti-deploy/scripts/setup_app.sh:ro
+      - ./scripts/run_minio.sh:/root/opencti-deploy/scripts/run_minio.sh:ro
+      - ./scripts/run_redis.sh:/root/opencti-deploy/scripts/run_redis.sh:ro
+      - ./scripts/run_rabbitmq.sh:/root/opencti-deploy/scripts/run_rabbitmq.sh:ro
+      - ./scripts/gen-ssl-cert.sh:/root/opencti-deploy/scripts/gen-ssl-cert.sh:ro
+
+      # ── systemd/ — mount từng service file ──
+      - ./systemd/minio.service:/root/opencti-deploy/systemd/minio.service:ro
+      - ./systemd/redis.service:/root/opencti-deploy/systemd/redis.service:ro
+      - ./systemd/rabbitmq-server.service:/root/opencti-deploy/systemd/rabbitmq-server.service:ro
+      - ./systemd/opencti-platform.service:/root/opencti-deploy/systemd/opencti-platform.service:ro
+      - ./systemd/opencti-worker@.service:/root/opencti-deploy/systemd/opencti-worker@.service:ro
+
+      # ── config/ — mount từng file config ──
+      - ./config/start.sh:/root/opencti-deploy/config/start.sh:ro
+      - ./config/start-worker.sh:/root/opencti-deploy/config/start-worker.sh:ro
+      - ./config/redis.conf:/root/opencti-deploy/config/redis.conf:ro
+      - ./config/minio.conf:/root/opencti-deploy/config/minio.conf:ro
+      - ./config/rabbitmq.conf:/root/opencti-deploy/config/rabbitmq.conf:ro
+      - ./config/rabbitmq-env.conf:/root/opencti-deploy/config/rabbitmq-env.conf:ro
+      - ./config/enabled_plugins:/root/opencti-deploy/config/enabled_plugins:ro
+      - ./config/90-opencti.conf:/root/opencti-deploy/config/90-opencti.conf:ro
+      - ./config/opencti-logrotate.conf:/root/opencti-deploy/config/opencti-logrotate.conf:ro
+
+      # ── config → system paths (pre-populate cho services) ──
       - ./config/redis.conf:/etc/redis/redis.conf:ro
       - ./config/minio.conf:/etc/minio/minio.conf:ro
       - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./config/rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
       - ./config/enabled_plugins:/opt/rabbitmq/etc/rabbitmq/enabled_plugins:ro
+
+      # ── cert/ — SSL certificates ──
+      - ./cert/opencti.key:/root/opencti-deploy/cert/opencti.key:ro
+      - ./cert/opencti.crt:/root/opencti-deploy/cert/opencti.crt:ro
     ports:
       - "16379:6379"      # Redis
       - "19000:9000"      # MinIO API
       - "19001:9001"      # MinIO Console
       - "15672:5672"      # RabbitMQ AMQP
       - "25672:15672"     # RabbitMQ Management
+      - "18443:8443"      # OpenCTI Platform (HTTPS)
     environment:
       - container=docker
-    mem_limit: 4g
+    mem_limit: 6g
     stop_grace_period: 15s
     restart: unless-stopped
+
+  # ── Elasticsearch 8.x — container riêng (giả lập ES đã cài sẵn trên server) ──
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
+    container_name: opencti-elasticsearch
+    hostname: elasticsearch
+    environment:
+      - node.name=node-1
+      - cluster.name=opencti-cluster
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - ./config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+      - es-data:/usr/share/elasticsearch/data
+    ports:
+      - "19200:9200"      # Elasticsearch API
+    mem_limit: 2g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+
+volumes:
+  es-data:
+    driver: local

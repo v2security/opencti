@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────
+# 03-build-backend.sh — Build OpenCTI backend (yarn install + build:prod)
+#
+# Extracts Python 3.12 + Node.js 22 from step 01/02, puts them
+# in PATH, then builds the backend. node-calls-python native
+# addon compiles against Python 3.12 automatically because
+# Python 3.12 is FIRST in PATH.
+#
+# Requires:  files/python312.tar.gz  (from 01-build-python.sh)
+#            files/nodejs22.tar.gz   (from 02-build-nodejs.sh)
+#            gcc-c++, make on build machine
+# Produces:  opencti-graphql/build/back.js + node_modules/
+# ─────────────────────────────────────────────────────────────
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$BASE_DIR/.." && pwd)"
+FILES_DIR="$BASE_DIR/files"
+GRAPHQL_DIR="$REPO_ROOT/opencti-platform/opencti-graphql"
+
+log() { echo "  $1 $2"; }
+
+# ── Skip if already built ────────────────────────────────────
+if [[ -f "$GRAPHQL_DIR/build/back.js" ]]; then
+    log "✓" "build/back.js exists → skip (delete build/ to rebuild)"
+    exit 0
+fi
+
+echo "▸ Building OpenCTI backend"
+
+# ── Extract runtimes to temp ──────────────────────────────────
+TMP="/tmp/build-env"
+rm -rf "$TMP" && mkdir -p "$TMP"
+
+log "→" "Extracting Python 3.12 + Node.js 22..."
+tar -xzf "$FILES_DIR/python312.tar.gz" -C "$TMP/"
+tar -xzf "$FILES_DIR/nodejs22.tar.gz"  -C "$TMP/"
+
+# Python 3.12 FIRST in PATH → node-calls-python compiles against 3.12
+export PATH="$TMP/python312/bin:$TMP/nodejs/bin:$PATH"
+export LD_LIBRARY_PATH="$TMP/python312/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+ln -sf "$TMP/python312/bin/python3.12" "$TMP/python312/bin/python3" 2>/dev/null || true
+ln -sf "$TMP/python312/bin/python3.12-config" "$TMP/python312/bin/python3-config" 2>/dev/null || true
+
+log "✓" "Python: $(python3 --version) | Node: $(node --version)"
+
+# ── Enable corepack + node-gyp ───────────────────────────────
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+"$TMP/nodejs/bin/corepack" enable --install-directory "$TMP/nodejs/bin" 2>/dev/null || true
+npm install -g node-gyp 2>&1 | tail -2
+
+# ── Prepare workspace ────────────────────────────────────────
+cp "$REPO_ROOT/opencti-platform/.yarnrc.yml" "$GRAPHQL_DIR/.yarnrc.yml" 2>/dev/null || true
+rm -rf "$GRAPHQL_DIR/node_modules/node-calls-python/build" 2>/dev/null || true
+
+# ── Build ─────────────────────────────────────────────────────
+cd "$GRAPHQL_DIR"
+
+log "→" "yarn install..."
+yarn install 2>&1 | tail -5
+
+# Rebuild node-calls-python native addon against Python 3.12
+# Yarn does not re-trigger node-gyp when enableScripts: false and node_modules already linked
+log "→" "Rebuilding node-calls-python native addon..."
+(cd "$GRAPHQL_DIR/node_modules/node-calls-python" && node-gyp rebuild 2>&1 | tail -5)
+
+log "→" "pip install requirements..."
+python3 -m pip install --upgrade pip 2>&1 | tail -1 || true
+python3 -m pip install -q -r src/python/requirements.txt 2>&1 | tail -3 || true
+
+log "→" "yarn build:prod..."
+NODE_OPTIONS="--max_old_space_size=8192" yarn build:prod 2>&1 | tail -10
+
+[[ -f "$GRAPHQL_DIR/build/back.js" ]] || { log "✗" "build/back.js not found!"; exit 1; }
+
+# ── Cleanup ───────────────────────────────────────────────────
+rm -rf "$TMP"
+
+log "✓" "Backend built: $(du -sh "$GRAPHQL_DIR/build" | cut -f1)"

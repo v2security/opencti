@@ -3,13 +3,14 @@
 # Rocky Linux 9 — Test container cho Infrastructure (MinIO + Redis + RabbitMQ)
 #
 # Container giả lập máy đích (bare-metal Rocky 9) với systemd.
-# Mount files/, rpm/, infra/ từ host, chạy setup_infra.sh bên trong.
+# Mount files/, rpm/, scripts/, systemd/ từ host.
 #
 # Usage:
 #   cd opencti-deploy-offline
 #   docker compose up -d
-#   docker exec opencti-infra-test bash /root/opencti-deploy/infra/setup_infra.sh
-#   docker exec opencti-infra-test systemctl status redis minio rabbitmq-server
+#   docker exec opencti-test bash /root/opencti-deploy/scripts/setup_infra.sh
+#   docker exec opencti-test bash /root/opencti-deploy/scripts/setup_app.sh
+#   docker exec opencti-test systemctl status redis minio rabbitmq-server
 ###############################################################################
 
 FROM rockylinux:9
@@ -46,6 +47,13 @@ RUN dnf install -y --allowerasing \
         findutils \
         make \
     && dnf clean all
+
+# ── Node.js 22 (cho OpenCTI Platform runtime) ───────────────
+# Node.js sẽ được cài tự động từ opencti-app-package.tar.gz khi chạy setup_app.sh.
+# Không cần cài Node.js trong Dockerfile — giả lập đúng môi trường offline.
+# Nếu muốn pre-install: uncomment 2 dòng dưới:
+# RUN curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - \
+#     && dnf install -y nodejs && dnf clean all
 
 # ── Working directory ────────────────────────────────────────
 RUN mkdir -p /root/opencti-deploy

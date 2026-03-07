@@ -1,0 +1,39 @@
+[Unit]
+Description=OpenCTI Worker %i (Background Task Processor)
+Documentation=https://docs.opencti.io
+After=network-online.target opencti-platform.service
+Wants=network-online.target
+Requires=opencti-platform.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Start script chứa env vars + exec python3 worker.py
+ExecStart=/bin/bash /etc/saids/application/opencti-worker/start-worker.sh
+
+WorkingDirectory=/etc/saids/application/opencti-worker/src
+
+Restart=always
+RestartSec=15
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Resource limits
+LimitNOFILE=65536
+
+# Ensure log directory exists
+ExecStartPre=/bin/mkdir -p /var/log/application/opencti-worker
+
+# Logging — mỗi instance ghi log riêng: opencti-worker-1.log, opencti-worker-2.log, ...
+StandardOutput=append:/var/log/application/opencti-worker/opencti-worker-%i.log
+StandardError=append:/var/log/application/opencti-worker/opencti-worker-%i.log
+SyslogIdentifier=opencti-worker-%i
+
+# Timeouts
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

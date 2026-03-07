@@ -4,8 +4,18 @@ output/
 # SSL certificates (contain private keys — NEVER commit)
 cert/
 
-# Start script (contains secrets — NEVER commit)
+# Start scripts (contains secrets — NEVER commit)
 config/start.sh
+config/start-worker.sh
 
-# Offline deploy archive
+# Offline deploy archives
 opencti-offline-deploy.tar.gz
+files/opencti-bundle.tar.gz
+files/opencti-source.tar.gz
+files/opencti-app-package.tar.gz
+files/python-deps.tar.gz
+
+# Runtime tarballs (large binaries — download during build)
+files/node-v*-linux-x64.tar.xz
+files/python312.tar.gz
+files/nodejs22.tar.gz
