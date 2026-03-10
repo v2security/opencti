@@ -89,24 +89,23 @@ services:
       interval: 30s
       timeout: 30s
       retries: 3
-  #mysql:
-  #  image: mysql:8.0
-  #  container_name: opencti_mysql
-  #  environment:
-  #    - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
-  #    - MYSQL_DATABASE=${MYSQL_DATABASE}
-  #    - MYSQL_USER=${MYSQL_USER}
-  #    - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-  #  volumes:
-  #    - mysqldata:/var/lib/mysql
-  #  networks:
-  #    - opencti_network
-  #  restart: always
-  #  healthcheck:
-  #    test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-  #    interval: 10s
-  #    timeout: 5s
-  #    retries: 3
+  # docker compose down mysql -v
+  # docker compose up -d mysql
+  mysql:
+   image: mysql:8.0
+   environment:
+     - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+     - MYSQL_DATABASE=${MYSQL_DATABASE}
+   ports:
+     - "3306:3306"
+   volumes:
+     - mysqldata:/var/lib/mysql
+   restart: always
+   healthcheck:
+     test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+     interval: 10s
+     timeout: 5s
+     retries: 3
 
   ###########################
   # COMMON                  #
@@ -536,18 +535,17 @@ services:
   # docker compose down connector-maltrail
   # docker compose up -d connector-maltrail
   connector-maltrail:
-    image: connector-maltrail:${OPENCTI_VERSION}
+    image: opencti/connector-maltrail:${OPENCTI_VERSION}
     container_name: connector-maltrail
-    pull_policy: never
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-#      - CONNECTOR_ID=${CONNECTOR_MALTRAIL_ID}
+      - CONNECTOR_ID=${CONNECTOR_MALTRAIL_ID}
       - "CONNECTOR_NAME=Maltrail" # Optional (default: 'Maltrail')
       - CONNECTOR_SCOPE=maltrail
       - CONNECTOR_LOG_LEVEL=error # Optional (default: 'error')
       - CONNECTOR_DURATION_PERIOD=P1D # Optional (default: 1 day)
-      - MALTRAIL_IMPORT_CATEGORIES=malware # Optional (default: 'malware'), comma-separated: malware,suspicious
+      - MALTRAIL_IMPORT_CATEGORIES=malware,static # Optional (default: 'malware'), comma-separated: malware,suspicious
       - MALTRAIL_CREATE_INDICATORS=true # Optional (default: true)
       - MALTRAIL_CREATE_OBSERVABLES=true # Optional (default: true)
       - MALTRAIL_MALWARE_SCORE=50 # Optional (default: 50)
@@ -566,3 +564,4 @@ volumes:
   redisdata:
   amqpdata:
   rsakeys:
+  mysqldata:
