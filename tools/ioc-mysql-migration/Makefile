@@ -9,6 +9,14 @@ MYSQL_CMD    := mysql -h $(MYSQL_HOST) -P $(MYSQL_PORT) -u $(MYSQL_USER) -p$(MYS
 
 .PHONY: migrate describe check help
 
+## Show first 10 rows of each table
+sample:
+	@echo "=== ids_blacklist (first 10 rows) ==="
+	@$(MYSQL_CMD) -e "SELECT * FROM ids_blacklist LIMIT 10;" 2>/dev/null || echo "(table not found)"
+	@echo ""
+	@echo "=== hashlist (first 10 rows) ==="
+	@$(MYSQL_CMD) -e "SELECT * FROM hashlist LIMIT 10;" 2>/dev/null || echo "(table not found)"
+
 ## Run all migrations
 migrate:
 	source .env && go run main.go
@@ -37,6 +45,7 @@ status:
 all: migrate describe
 
 help:
+	@echo "make sample    — show first 10 rows"
 	@echo "make migrate   — run migrations"
 	@echo "make describe  — DESCRIBE both tables"
 	@echo "make check     — show indexes + row counts"

@@ -1,0 +1,67 @@
+# =============================================================================
+# IOC ES→MySQL Sync Tool — Configuration
+# =============================================================================
+# File config chính. Secrets dùng ${VAR} để tham chiếu biến môi trường (.env).
+# Ví dụ:  password: "${MYSQL_PASSWORD}"  → lấy giá trị MYSQL_PASSWORD từ .env
+
+opencti:
+  api_url: "http://localhost:8080"
+  api_token: "${OPENCTI_API_TOKEN}"
+  min_score: 70              # x_opencti_score >= 70
+  min_confidence: 70         # confidence >= 70
+
+mysql:
+  host: "127.0.0.1"
+  port: "3306"
+  user: "${MYSQL_USER}"
+  password: "${MYSQL_PASSWORD}"
+  database: "${MYSQL_DATABASE}"
+  pool_size: 5
+
+scheduler:
+  # Thời điểm bắt đầu đồng bộ dữ liệu từ OpenCTI
+  # Format: YYYYMMDDHHmmss
+  # Nếu để rỗng → sync toàn bộ từ epoch
+  time_start_sync: "20240101000000"
+  # -------- IDS BLACKLIST (IP / DOMAIN) --------
+  # Số lượng IOC (IP/Domain) xử lý trong mỗi batch khi đồng bộ vào ids_blacklist
+  # Batch nhỏ giúp tránh gây quá tải cho OpenCTI API và GeoIP lookup
+  geoip_batch_size: 50
+  # Thời gian nghỉ (giây) sau khi xử lý xong toàn bộ batch ids_blacklist
+  # Mục đích: giảm tải cho GeoIP lookup service
+  geoip_sleep_seconds: 5
+  # -------- HASH ENRICHMENT (VirusTotal) --------
+  # Number of observables per database commit batch.
+  # Each observable triggers at most 1 VT lookup; actual pacing is
+  # governed by vt_rate_limit below, NOT by batch size.
+  vt_batch_size: 4
+  # Maximum VT API requests allowed per minute (free tier = 4).
+  # Scheduler inserts a ~(60 / vt_rate_limit) second pause between
+  # consecutive VT calls so the minute window is never exceeded.
+  vt_rate_limit: 4
+  # Maximum VT API requests allowed per calendar day (free tier = 500).
+  # When exhausted the scheduler pauses enrichment until the next day.
+  vt_daily_quota: 500
+  # Maximum VT API requests allowed per calendar month (free tier = 15 500).
+  # When exhausted the scheduler pauses enrichment until the next month.
+  vt_monthly_quota: 15500
+  # -------- SCHEDULER CONTROL --------
+  # Thời gian chờ (giây) khi đã hết data cũ, chỉ còn realtime
+  # Tránh query OpenCTI liên tục khi không có data mới
+  idle_sleep_seconds: 60
+
+geoip:
+  maxmind_db_path: "./GeoLite2-Country.mmdb"   # path tới file GeoLite2-Country.mmdb
+
+virustotal:
+  enabled: true
+  api_key: "${VIRUSTOTAL_API_KEY}"
+  url: "https://www.virustotal.com/api/v3/files/{hash}"
+  timeout: 10
+
+defaults:
+  srctype: "v2"
+  type: "global"
+  source: "opencti"
+
+log_level: "INFO"

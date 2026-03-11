@@ -3,7 +3,7 @@
 -- Source: FR-01__Design.md schema from TI Server (163.223.58.154)
 
 CREATE TABLE IF NOT EXISTS `ids_blacklist` (
-    `id`      INT          NOT NULL,
+    `id`      INT          NOT NULL AUTO_INCREMENT,
     `stype`   TINYTEXT     NOT NULL COMMENT 'IOC type: ip, domain',
     `value`   VARCHAR(255) NOT NULL COMMENT 'IOC value: IP address or domain name',
     `country` TINYTEXT     NOT NULL COMMENT 'Country of origin (or "none")',
