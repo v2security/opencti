@@ -8,19 +8,18 @@
 # Input (từ opencti-deploy-offline/):
 #   files/minio                                     MinIO binary
 #   files/mc                                        MinIO client (optional)
-#   files/redis-*.tar.gz                            Redis source
 #   files/rabbitmq-server-generic-unix-*.tar.xz     RabbitMQ tarball
-#   rpm/*.rpm                                       Erlang + system deps
+#   rpm/*.rpm                                       Erlang + system deps + Redis RPM
 #   scripts/setup_infra.sh                          Main setup script
 #   scripts/setup_app.sh                            App setup script
+#   scripts/enable-services.sh                      Service enablement script
 #   scripts/stop-infra.sh                           Infra cleanup script
 #   scripts/stop-app.sh                             App cleanup script
 #   scripts/run_minio.sh                            MinIO run script
-#   scripts/run_redis.sh                            Redis run script
 #   scripts/run_rabbitmq.sh                         RabbitMQ run script
 #   systemd/minio.service                           MinIO systemd unit
-#   systemd/redis.service                           Redis systemd unit
 #   systemd/rabbitmq-server.service                 RabbitMQ systemd unit
+#   (redis.service is provided by RPM, not packaged)
 #   systemd/opencti-platform.service                Platform systemd unit
 #   systemd/opencti-worker@.service                 Worker template unit
 #   config/start.sh                                 Env vars (REDIS__, MINIO__, RABBITMQ__)
@@ -88,11 +87,6 @@ else
     HAS_MC=false
 fi
 
-REDIS_TARBALL=$(ls "$FILES_DIR"/redis-*.tar.gz 2>/dev/null | head -1) \
-    || die "Missing: files/redis-*.tar.gz"
-[[ -f "$REDIS_TARBALL" ]] || die "Missing: files/redis-*.tar.gz"
-log "✓" "files/$(basename "$REDIS_TARBALL")"
-
 RABBITMQ_TARBALL=$(ls "$FILES_DIR"/rabbitmq-server-generic-unix-*.tar.xz 2>/dev/null | head -1) \
     || die "Missing: files/rabbitmq-server-generic-unix-*.tar.xz"
 [[ -f "$RABBITMQ_TARBALL" ]] || die "Missing: files/rabbitmq-server-generic-unix-*.tar.xz"
@@ -104,7 +98,7 @@ RPM_COUNT=$(ls "$RPM_DIR"/*.rpm 2>/dev/null | wc -l)
 log "✓" "rpm/ ($RPM_COUNT packages)"
 
 # Check critical RPMs
-for pkg in erlang gcc gcc-c++; do
+for pkg in erlang redis; do
     if ! ls "$RPM_DIR"/${pkg}-*.rpm &>/dev/null; then
         log "✗" "THIẾU: rpm/${pkg}-*.rpm"
         ERRORS=$((ERRORS + 1))
@@ -132,16 +126,17 @@ if [[ -n "$WARN_PKGS" ]]; then
 fi
 
 # --- scripts/ ---
-for f in setup_infra.sh setup_app.sh stop-infra.sh stop-app.sh run_minio.sh run_redis.sh run_rabbitmq.sh; do
+for f in setup_infra.sh setup_app.sh enable-services.sh stop-infra.sh stop-app.sh run_minio.sh run_rabbitmq.sh; do
     [[ -f "$BASE_DIR/scripts/$f" ]] || { log "✗" "Missing: scripts/$f"; ERRORS=$((ERRORS + 1)); }
     log "✓" "scripts/$f"
 done
 
 # --- systemd/ ---
-for f in minio.service redis.service rabbitmq-server.service opencti-platform.service opencti-worker@.service; do
+for f in minio.service rabbitmq-server.service opencti-platform.service opencti-worker@.service; do
     [[ -f "$BASE_DIR/systemd/$f" ]] || { log "✗" "Missing: systemd/$f"; ERRORS=$((ERRORS + 1)); }
     log "✓" "systemd/$f"
 done
+log "ℹ" "redis.service — provided by RPM, not packaged"
 
 # --- config/ ---
 for f in start.sh start-worker.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins 90-opencti.conf opencti-logrotate.conf elasticsearch.yml; do
@@ -182,9 +177,6 @@ if [[ "$HAS_MC" == "true" ]]; then
     log "→" "files/mc"
 fi
 
-cp "$REDIS_TARBALL" "$STAGING/files/"
-log "→" "files/$(basename "$REDIS_TARBALL")"
-
 cp "$RABBITMQ_TARBALL" "$STAGING/files/"
 log "→" "files/$(basename "$RABBITMQ_TARBALL")"
 
@@ -193,17 +185,17 @@ cp "$RPM_DIR"/*.rpm "$STAGING/rpm/"
 log "→" "rpm/ ($RPM_COUNT RPMs)"
 
 # scripts/
-for f in setup_infra.sh setup_app.sh stop-infra.sh stop-app.sh run_minio.sh run_redis.sh run_rabbitmq.sh; do
+for f in setup_infra.sh setup_app.sh enable-services.sh stop-infra.sh stop-app.sh run_minio.sh run_rabbitmq.sh; do
     cp "$BASE_DIR/scripts/$f" "$STAGING/scripts/"
 done
 chmod +x "$STAGING/scripts/"*.sh
 log "→" "scripts/ (7 files)"
 
 # systemd/
-for f in minio.service redis.service rabbitmq-server.service opencti-platform.service opencti-worker@.service; do
+for f in minio.service rabbitmq-server.service opencti-platform.service opencti-worker@.service; do
     cp "$BASE_DIR/systemd/$f" "$STAGING/systemd/"
 done
-log "→" "systemd/ (5 files)"
+log "→" "systemd/ (4 files, redis.service from RPM)"
 
 # config/
 for f in start.sh start-worker.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins 90-opencti.conf opencti-logrotate.conf elasticsearch.yml; do
@@ -247,10 +239,10 @@ echo "  📊 Size:     $SIZE"
 echo "  ⏱  Time:     ${ELAPSED}s"
 echo ""
 echo "  📋 Contents:"
-echo "     files/     minio, mc, redis, rabbitmq binaries/source"
-echo "     rpm/       $RPM_COUNT RPM packages (Erlang + deps)"
+echo "     files/     minio, mc, rabbitmq binaries"
+echo "     rpm/       $RPM_COUNT RPM packages (Erlang + Redis + deps)"
 echo "     scripts/   setup/stop infra+app, run_*.sh (7 files)"
-echo "     systemd/   minio, redis, rabbitmq, platform, worker (5 files)"
+echo "     systemd/   minio, rabbitmq, platform, worker (4 files, redis.service from RPM)"
 echo "     config/    start.sh, start-worker.sh, ES, sysctl, logrotate (10 files)"
 echo "     cert/      SSL certificates (opencti.key, opencti.crt)"
 echo ""
@@ -261,4 +253,6 @@ echo "     3. mkdir -p /root/opencti-deploy"
 echo "     4. tar -xzf $OUTPUT -C /root/opencti-deploy"
 echo "        (cert/ tự động được bung ra cùng package)"
 echo "     5. bash /root/opencti-deploy/scripts/setup_infra.sh"
+echo "     6. bash /root/opencti-deploy/scripts/setup_app.sh"
+echo "     7. bash /root/opencti-deploy/scripts/enable-services.sh"
 echo ""

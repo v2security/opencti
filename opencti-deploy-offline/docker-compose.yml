@@ -7,7 +7,7 @@
 #   2. elasticsearch  — Elasticsearch 8.x container (đã có sẵn, chỉ mount config)
 #
 # Mount:
-#   ./files/   → /root/opencti-deploy/files     (MinIO binary, Redis source, RabbitMQ tarball, OpenCTI bundle, Python runtime)
+#   ./files/   → /root/opencti-deploy/files     (MinIO binary, RabbitMQ tarball, OpenCTI bundle, Python runtime)
 #   ./rpm/     → /root/opencti-deploy/rpm       (Erlang RPM, system deps)
 #   ./scripts/ → /root/opencti-deploy/scripts   (run_*.sh, setup scripts)
 #   ./systemd/ → /root/opencti-deploy/systemd   (*.service files)
@@ -44,7 +44,6 @@ services:
       # ── files/ — chỉ mount file cần cho deployment (bỏ build artifacts) ──
       - ./files/minio:/root/opencti-deploy/files/minio:ro
       - ./files/mc:/root/opencti-deploy/files/mc:ro
-      - ./files/redis-8.4.2.tar.gz:/root/opencti-deploy/files/redis-8.4.2.tar.gz:ro
       - ./files/rabbitmq-server-generic-unix-4.2.0.tar.xz:/root/opencti-deploy/files/rabbitmq-server-generic-unix-4.2.0.tar.xz:ro
       - ./files/opencti-app-package.tar.gz:/root/opencti-deploy/files/opencti-app-package.tar.gz:ro
 
@@ -55,13 +54,12 @@ services:
       - ./scripts/setup_infra.sh:/root/opencti-deploy/scripts/setup_infra.sh:ro
       - ./scripts/setup_app.sh:/root/opencti-deploy/scripts/setup_app.sh:ro
       - ./scripts/run_minio.sh:/root/opencti-deploy/scripts/run_minio.sh:ro
-      - ./scripts/run_redis.sh:/root/opencti-deploy/scripts/run_redis.sh:ro
       - ./scripts/run_rabbitmq.sh:/root/opencti-deploy/scripts/run_rabbitmq.sh:ro
+      - ./scripts/enable-services.sh:/root/opencti-deploy/scripts/enable-services.sh:ro
       - ./scripts/gen-ssl-cert.sh:/root/opencti-deploy/scripts/gen-ssl-cert.sh:ro
 
       # ── systemd/ — mount từng service file ──
       - ./systemd/minio.service:/root/opencti-deploy/systemd/minio.service:ro
-      - ./systemd/redis.service:/root/opencti-deploy/systemd/redis.service:ro
       - ./systemd/rabbitmq-server.service:/root/opencti-deploy/systemd/rabbitmq-server.service:ro
       - ./systemd/opencti-platform.service:/root/opencti-deploy/systemd/opencti-platform.service:ro
       - ./systemd/opencti-worker@.service:/root/opencti-deploy/systemd/opencti-worker@.service:ro
@@ -78,7 +76,7 @@ services:
       - ./config/opencti-logrotate.conf:/root/opencti-deploy/config/opencti-logrotate.conf:ro
 
       # ── config → system paths (pre-populate cho services) ──
-      - ./config/redis.conf:/etc/redis/redis.conf:ro
+      # redis.conf: RPM creates default, setup_infra.sh overrides with custom
       - ./config/minio.conf:/etc/minio/minio.conf:ro
       - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./config/rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro

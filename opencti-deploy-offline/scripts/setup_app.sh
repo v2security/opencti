@@ -1,13 +1,18 @@
 #!/bin/bash
 ###############################################################################
-# SETUP APP — Deploy OpenCTI Platform + Worker (Part 2)
+# SETUP APP — First Boot (File Placement Only)
 # Target: Rocky Linux 9 (offline deployment)
 #
-# Script này deploy TOÀN BỘ phần ứng dụng từ pre-built package:
+# Script này CHỈ đặt file vào đúng vị trí. KHÔNG start services.
+# Sau khi chạy xong, dùng:
+#   bash scripts/enable-services.sh      ← Start tất cả + health check
+#   hoặc: systemctl enable --now opencti-platform opencti-worker@{1..3}
+#
+# Deploy TOÀN BỘ phần ứng dụng từ pre-built package:
 #   • Python 3.12 runtime (compiled, --enable-shared) → /opt/python312
 #   • Node.js 22 runtime (pre-built binary)           → /opt/nodejs
-#   • OpenCTI Platform (backend + frontend) → /etc/saids/application/opencti
-#   • OpenCTI Worker (Python)               → /etc/saids/application/opencti-worker
+#   • OpenCTI Platform (backend + frontend) → /etc/saids/opencti
+#   • OpenCTI Worker (Python)               → /etc/saids/opencti-worker
 #   • Python venvs + offline pip packages
 #   • Systemd services
 #   • SSL certificates
@@ -33,17 +38,19 @@
 #       └── opencti-worker@.service
 #
 # Cách dùng:
-#   bash setup_app.sh                     # Full deploy + start
+#   bash setup_app.sh                     # Full deploy (file placement only)
 #   bash setup_app.sh --skip-worker       # Chỉ deploy platform
-#   bash setup_app.sh --skip-start        # Deploy nhưng không start
+#
+# ⚠ Script này chỉ đặt file, KHÔNG start services.
+#   Sau khi xong, chạy: bash enable-services.sh
 #
 # Kết quả:
 #   /opt/python312/                        ← Python 3.12 runtime
 #   /opt/nodejs/                           ← Node.js 22 runtime
-#   /etc/saids/application/opencti/        ← Platform install
-#   /etc/saids/application/opencti-worker/ ← Worker install
-#   /var/log/application/opencti/          ← Platform logs
-#   /var/log/application/opencti-worker/   ← Worker logs
+#   /etc/saids/opencti/        ← Platform install
+#   /etc/saids/opencti-worker/ ← Worker install
+#   /var/log/opencti/          ← Platform logs
+#   /var/log/opencti-worker/   ← Worker logs
 #   /etc/systemd/system/opencti-platform.service
 #   /etc/systemd/system/opencti-worker@.service
 #
@@ -60,27 +67,24 @@ SYSTEMD_SRC="$DEPLOY_DIR/systemd"
 # Install paths
 PYTHON_HOME="/opt/python312"
 NODEJS_HOME="/opt/nodejs"
-OPENCTI_HOME="/etc/saids/application/opencti"
-WORKER_HOME="/etc/saids/application/opencti-worker"
-OPENCTI_LOG="/var/log/application/opencti"
-WORKER_LOG="/var/log/application/opencti-worker"
+OPENCTI_HOME="/etc/saids/opencti"
+WORKER_HOME="/etc/saids/opencti-worker"
+OPENCTI_LOG="/var/log/opencti"
+WORKER_LOG="/var/log/opencti-worker"
 
 PACKAGE="$FILES_DIR/opencti-app-package.tar.gz"
 TEMP_EXTRACT="/tmp/opencti-app-extract"
 
-TOTAL_STEPS=8
+TOTAL_STEPS=7
 
 # ── Parse flags ──────────────────────────────────────────────
 SKIP_WORKER=false
-SKIP_START=false
 for arg in "$@"; do
     case "$arg" in
         --skip-worker) SKIP_WORKER=true ;;
-        --skip-start)  SKIP_START=true ;;
         --help|-h)
-            echo "Usage: $0 [--skip-worker] [--skip-start]"
+            echo "Usage: $0 [--skip-worker]"
             echo "  --skip-worker  Chỉ deploy platform, bỏ qua worker"
-            echo "  --skip-start   Deploy nhưng không start services"
             exit 0 ;;
     esac
 done
@@ -111,7 +115,7 @@ wait_for() {
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║   SETUP APP — Part 2: Source Code + Môi trường             ║"
+echo "║   SETUP APP — First Boot (File Placement)                   ║"
 echo "║   Target: Rocky Linux 9 (offline)                          ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
@@ -348,13 +352,13 @@ if [[ "$SKIP_WORKER" == "false" ]]; then
 #!/bin/bash
 set -euo pipefail
 export LD_LIBRARY_PATH="/opt/python312/lib:${LD_LIBRARY_PATH:-}"
-export PATH="/opt/python312/bin:/etc/saids/application/opencti-worker/.python-venv/bin:$PATH"
+export PATH="/opt/python312/bin:/etc/saids/opencti-worker/.python-venv/bin:$PATH"
 export PYTHONUNBUFFERED=1
 export OPENCTI_URL="https://localhost:8443"
 export OPENCTI_TOKEN="f2de8e60-4914-4f69-a42f-6e0c70a72c30"
 export OPENCTI_SSL_VERIFY="false"
 export WORKER_LOG_LEVEL="info"
-cd /etc/saids/application/opencti-worker/src
+cd /etc/saids/opencti-worker/src
 exec python3 worker.py
 WORKEREOF
         chmod +x "$WORKER_HOME/start-worker.sh"
@@ -399,97 +403,15 @@ systemctl daemon-reload
 ok "systemctl daemon-reload done"
 
 # ══════════════════════════════════════════════════════════════
-# STEP 8: Enable and start services
-# ══════════════════════════════════════════════════════════════
-info 8 "Enable and start services"
-
-# Check infrastructure first
-detail "Checking infrastructure services..."
-
-# Redis
-REDIS_PASS=$(grep -oP '(?<=^requirepass ).*' /etc/redis/redis.conf 2>/dev/null || true)
-if command -v redis-cli &>/dev/null; then
-    redis-cli -p 6379 ${REDIS_PASS:+-a "$REDIS_PASS" --no-auth-warning} ping 2>/dev/null | grep -q PONG \
-        && ok "Redis: PONG" || warn "Redis: not responding"
-fi
-
-curl -sf http://localhost:9000/minio/health/live &>/dev/null \
-    && ok "MinIO: healthy" || warn "MinIO: not responding"
-
-ES_URL=$(grep -oP '(?<=ELASTICSEARCH__URL=")[^"]*' "$CONFIG_DIR/start.sh" 2>/dev/null || echo "http://localhost:9200")
-curl -sf "${ES_URL:-http://localhost:9200}" &>/dev/null \
-    && ok "Elasticsearch: healthy" || warn "Elasticsearch: not responding"
-
-RABBITMQ_CONF_ENV_FILE=/etc/rabbitmq/rabbitmq-env.conf rabbitmqctl status &>/dev/null \
-    && ok "RabbitMQ: running" || warn "RabbitMQ: not responding"
-
-if [[ "$SKIP_START" == "true" ]]; then
-    detail "SKIPPED (--skip-start)"
-    detail "Manually start with:"
-    detail "  systemctl start opencti-platform"
-    detail "  systemctl start opencti-worker@{1..3}"
-else
-    # Start platform
-    detail "Starting opencti-platform..."
-    systemctl enable opencti-platform 2>/dev/null || true
-    systemctl start opencti-platform 2>/dev/null || true
-    sleep 3
-
-    STATUS=$(systemctl is-active opencti-platform 2>/dev/null || echo "failed")
-    if [[ "$STATUS" == "active" ]]; then
-        ok "opencti-platform: $STATUS"
-    else
-        warn "opencti-platform: $STATUS"
-        warn "  → Check logs: journalctl -u opencti-platform -n 30 --no-pager"
-        journalctl -u opencti-platform -n 10 --no-pager 2>/dev/null || true
-    fi
-
-    # Start worker instances
-    if [[ "$SKIP_WORKER" == "false" ]]; then
-        detail "Waiting for platform API..."
-        wait_for "OpenCTI API" \
-            "curl -skf https://localhost:8443/health 2>/dev/null || curl -skf http://localhost:8443/health 2>/dev/null" \
-            120 || warn "Platform API not ready — starting workers anyway"
-
-        WORKER_COUNT=${WORKER_COUNT:-3}
-        detail "Starting $WORKER_COUNT worker instances..."
-        for i in $(seq 1 "$WORKER_COUNT"); do
-            systemctl enable "opencti-worker@${i}" 2>/dev/null || true
-            systemctl start  "opencti-worker@${i}" 2>/dev/null || true
-        done
-        sleep 2
-
-        for i in $(seq 1 "$WORKER_COUNT"); do
-            STATUS=$(systemctl is-active "opencti-worker@${i}" 2>/dev/null || echo "failed")
-            if [[ "$STATUS" == "active" ]]; then
-                ok "opencti-worker@${i}: $STATUS"
-            else
-                warn "opencti-worker@${i}: $STATUS"
-            fi
-        done
-    fi
-fi
-
-# ══════════════════════════════════════════════════════════════
 # SUMMARY
 # ══════════════════════════════════════════════════════════════
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║          SETUP APP COMPLETE (Part 2)                       ║"
+echo "║       SETUP APP COMPLETE (Files Only)                      ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 echo "  🐍 Python:   $("$PYTHON_HOME/bin/python3.12" --version 2>/dev/null || echo 'N/A')"
 echo "  📗 Node.js:  $("$NODEJS_HOME/bin/node" -v 2>/dev/null || echo 'N/A')"
-echo ""
-echo "  📊 Service Status:"
-for svc in opencti-platform opencti-worker@1 opencti-worker@2 opencti-worker@3; do
-    STATUS=$(systemctl is-active "$svc" 2>/dev/null || echo "inactive")
-    if [[ "$STATUS" == "active" ]]; then
-        printf "    ✅ %-22s %s\n" "$svc" "$STATUS"
-    else
-        printf "    ⚠️  %-22s %s\n" "$svc" "$STATUS"
-    fi
-done
 echo ""
 echo "  📁 Install Directories:"
 echo "    $PYTHON_HOME      Python 3.12 runtime"
@@ -501,14 +423,12 @@ echo "  📁 Logs:"
 echo "    $OPENCTI_LOG"
 echo "    $WORKER_LOG"
 echo ""
-echo "  🌐 Access:"
-echo "    Platform:   https://localhost:8443"
-echo "    Admin:      admin@v2secure.vn"
+echo "  📁 Systemd (NOT started yet):"
+echo "    /etc/systemd/system/opencti-platform.service"
+echo "    /etc/systemd/system/opencti-worker@.service"
 echo ""
-echo "  🔧 Commands:"
-echo "    systemctl status  opencti-platform opencti-worker@{1..3}"
-echo "    systemctl restart opencti-platform"
-echo "    systemctl restart opencti-worker@{1..3}"
-echo "    journalctl -u opencti-platform -f"
-echo "    journalctl -u opencti-worker@1 -f"
+echo "  ⚠  Services chưa được start!"
+echo "  👉 Bước tiếp: bash scripts/enable-services.sh"
+echo "     hoặc:      systemctl enable --now opencti-platform opencti-worker@{1..3}"
+echo "     status:    systemctl status opencti-platform opencti-worker@{1..3}"
 echo ""

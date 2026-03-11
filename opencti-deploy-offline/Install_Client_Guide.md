@@ -11,7 +11,7 @@ Hệ thống gồm 2 package, build trên máy có internet, copy sang máy offl
 
 | Package | File | Size | Chứa |
 |---------|------|------|------|
-| **Infra** | `opencti-infra-package.tar.gz` | ~200M | Redis 8.4, MinIO, RabbitMQ 4.2, Erlang 27, RPMs, configs, SSL cert |
+| **Infra** | `opencti-infra-package.tar.gz` | ~200M | Redis 6.2 (RPM), MinIO, RabbitMQ 4.2, Erlang 27, RPMs, configs, SSL cert |
 | **App** | `opencti-app-package.tar.gz` | ~430M | Python 3.12, Node.js 22, OpenCTI Platform + Frontend, Worker, pip packages |
 
 **Elasticsearch 8.x** cài riêng (không nằm trong package).
@@ -80,20 +80,20 @@ Sau khi extract, cấu trúc sẽ là:
 ├── files/
 │   ├── minio                               # MinIO binary
 │   ├── mc                                   # MinIO client
-│   ├── redis-8.4.2.tar.gz                   # Redis source
 │   ├── rabbitmq-server-generic-unix-4.2.0.tar.xz
 │   └── opencti-app-package.tar.gz           # (copy riêng)
-├── rpm/                                     # ~106 RPM packages
+├── rpm/                                     # ~106 RPM packages (bao gồm redis-*.rpm)
 ├── scripts/
 │   ├── setup_infra.sh                       # ← CHẠY TRƯỚC
 │   ├── setup_app.sh                         # ← CHẠY SAU
+│   ├── enable-services.sh                   # ← START SERVICES
 │   ├── run_minio.sh
-│   ├── run_redis.sh
 │   └── run_rabbitmq.sh
 ├── systemd/
 │   ├── minio.service
-│   ├── redis.service
-│   └── rabbitmq-server.service
+│   ├── rabbitmq-server.service
+│   ├── opencti-platform.service
+│   └── opencti-worker@.service   (redis.service do RPM cung cấp)
 ├── config/
 │   ├── start.sh                             # Platform env vars
 │   ├── redis.conf
@@ -157,20 +157,20 @@ curl -s http://localhost:9200
 bash /root/opencti-deploy/scripts/setup_infra.sh
 ```
 
-Script sẽ tự động thực hiện 8 bước:
+Script sẽ tự động thực hiện 6 bước:
 
 | Step | Hành động | Kết quả |
-|------|-----------|---------|
-| 1 | Load biến từ `config/start.sh` | Redis/MinIO/RabbitMQ credentials |
-| 2 | Cài RPMs offline (Erlang, gcc, gcc-c++...) | System dependencies |
-| 3 | Cài MinIO | `/opt/minio/bin/minio` |
-| 4 | Cài RabbitMQ (extract tarball) | `/opt/rabbitmq/sbin/` |
-| 5 | Compile Redis từ source | `/opt/redis/bin/redis-server` |
-| 6 | Copy run scripts | `/opt/infra/scripts/run_*.sh` |
-| 7 | Cài systemd services | `/etc/systemd/system/*.service` |
-| 8 | Start services + tạo RabbitMQ user + MinIO bucket | 3 services active |
+|------|-----------|----------|
+| 1 | Cài RPMs offline (Erlang, Redis, system deps) | `redis-server`, Erlang, system libs |
+| 2 | Cài MinIO binary | `/usr/local/bin/minio` |
+| 3 | Extract RabbitMQ tarball | `/opt/rabbitmq/sbin/` |
+| 4 | Override Redis config + copy run scripts | `/etc/redis/redis.conf`, `/opt/infra/scripts/` |
+| 5 | Cài systemd services (MinIO + RabbitMQ) | `/etc/systemd/system/*.service` |
+| 6 | Summary | Hiển thị kết quả + hướng dẫn |
 
-**Thời gian:** ~2-3 phút (Redis compile chiếm phần lớn)
+**Thời gian:** ~30 giây (không cần compile)
+
+> ⚠ setup_infra.sh chỉ đặt file, **không start service**. Chạy `enable-services.sh` sau.
 
 ### 3.3 Verify infrastructure
 
@@ -204,25 +204,25 @@ curl -s http://localhost:9200
 bash /root/opencti-deploy/scripts/setup_app.sh
 ```
 
-Script sẽ tự động thực hiện 8 bước:
+Script sẽ tự động thực hiện 7 bước:
 
 | Step | Hành động | Kết quả |
-|------|-----------|---------|
+|------|-----------|----------|
 | 1 | Extract `opencti-app-package.tar.gz` | Temp extract |
 | 2 | Cài Python 3.12 | `/opt/python312/` |
 | 3 | Cài Node.js 22 | `/opt/nodejs/` |
-| 4 | Deploy Platform + Worker | `/etc/saids/application/opencti/` |
+| 4 | Deploy Platform + Worker | `/etc/saids/opencti/` |
 | 5 | Tạo Python venvs + cài pip packages offline | `.python-venv/` |
 | 6 | Copy SSL certs + config files | `ssl/`, `start.sh`, sysctl, logrotate |
 | 7 | Cài systemd services | `opencti-platform.service`, `opencti-worker@.service` |
-| 8 | Start platform + 3 workers | 4 services active |
+
+> ⚠ Services chưa được start — chạy `enable-services.sh` sau.
 
 **Thời gian:** ~1-2 phút
 
 **Flags tùy chọn:**
 ```bash
 bash /root/opencti-deploy/scripts/setup_app.sh --skip-worker   # Chỉ platform
-bash /root/opencti-deploy/scripts/setup_app.sh --skip-start    # Deploy không start
 ```
 
 ### 4.2 Verify application
@@ -236,8 +236,8 @@ curl -sk https://localhost:8443/health
 # → {"status":"unauthorized"}  (đúng — cần auth)
 
 # Application logs
-tail -f /var/log/application/opencti/opencti-platform.log
-tail -f /var/log/application/opencti-worker/opencti-worker-1.log
+tail -f /var/log/opencti/opencti-platform.log
+tail -f /var/log/opencti-worker/opencti-worker-1.log
 ```
 
 ---
@@ -245,12 +245,13 @@ tail -f /var/log/application/opencti-worker/opencti-worker-1.log
 ### 4.3 Debug node application
 ```bash
 # 1. Tìm TẤT CẢ native addons và kiểm tra missing libs
-find /etc/saids/application/opencti/node_modules -name "*.node" -type f -exec sh -c 'missing=$(ldd "$1" 2>&1 | grep "not found"); [ -n "$missing" ] && echo "=== $1 ===" && echo "$missing"' _ {} \;
+find /etc/saids/opencti/node_modules -name "*.node" -type f -exec sh -c 'missing=$(ldd "$1" 2>&1 | grep "not found"); [ -n "$missing" ] && echo "=== $1 ===" && echo "$missing"' _ {} \;
 
 # 2. Chạy node trực tiếp (không qua npm) để xem lỗi rõ hơn
-cd /etc/saids/application/opencti
+cd /etc/saids/opencti
+systemctl stop opencti-platform.service
 export LD_LIBRARY_PATH="/opt/python312/lib"
-export PATH="/opt/nodejs/bin:/opt/python312/bin:/etc/saids/application/opencti/.python-venv/bin:$PATH"
+export PATH="/opt/nodejs/bin:/opt/python312/bin:/etc/saids/opencti/.python-venv/bin:$PATH"
 export NODE_ENV=production
 export NODE_OPTIONS="--max-old-space-size=8096"
 node build/back.js 2>&1 | head -50
@@ -331,8 +332,9 @@ cp /root/opencti-app-package.tar.gz /root/opencti-deploy/files/
 # Cài Elasticsearch trước (xem Phần 3.1)
 
 # Chạy setup infra trước khi setup application
-bash /root/opencti-deploy/scripts/setup_infra.sh   # 4. Infra (~3 min)
+bash /root/opencti-deploy/scripts/setup_infra.sh   # 4. Infra (~30s)
 bash /root/opencti-deploy/scripts/setup_app.sh      # 5. App (~2 min)
+bash /root/opencti-deploy/scripts/enable-services.sh # 6. Start all services
 
 # Verify
 systemctl status redis minio rabbitmq-server opencti-platform opencti-worker@{1..3}
@@ -347,12 +349,13 @@ curl -sk https://localhost:8443/health
 /opt/
 ├── python312/          # Python 3.12 runtime
 ├── nodejs/             # Node.js 22 runtime
-├── minio/bin/minio     # MinIO binary
-├── redis/bin/          # Redis (compiled)
 ├── rabbitmq/sbin/      # RabbitMQ binaries
-└── infra/scripts/      # run_*.sh
+└── infra/scripts/      # run_*.sh (MinIO, RabbitMQ)
 
-/etc/saids/application/
+/usr/local/bin/minio           # MinIO binary
+/usr/bin/redis-server          # Redis (from RPM)
+
+/etc/saids/
 ├── opencti/            # Platform
 │   ├── build/back.js   # Backend build
 │   ├── public/         # Frontend build
@@ -367,22 +370,23 @@ curl -sk https://localhost:8443/health
 
 /etc/
 ├── minio/minio.conf
-├── redis/redis.conf
+├── redis/redis.conf              # RPM default, overridden by setup_infra.sh
 ├── rabbitmq/rabbitmq.conf
 └── systemd/system/
     ├── minio.service
-    ├── redis.service
     ├── rabbitmq-server.service
     ├── opencti-platform.service
     └── opencti-worker@.service
 
+/usr/lib/systemd/system/
+└── redis.service                 # (do RPM cung cấp)
+
 /var/log/
 ├── minio/
-├── redis/
+├── redis/                        # (do RPM tạo)
 ├── rabbitmq/
-└── application/
-    ├── opencti/
-    └── opencti-worker/
+├── opencti/                      # Platform logs
+└── opencti-worker/               # Worker logs
 ```
 
 ---
@@ -409,7 +413,7 @@ journalctl -u opencti-platform -n 50 --no-pager
 # Nguyên nhân phổ biến:
 # - Elasticsearch chưa sẵn sàng → chờ ES healthy rồi restart
 # - Redis password sai → kiểm tra start.sh vs redis.conf
-# - SSL cert không tìm thấy → kiểm tra /etc/saids/application/opencti/ssl/
+# - SSL cert không tìm thấy → kiểm tra /etc/saids/opencti/ssl/
 ```
 
 ### Worker không kết nối
@@ -421,10 +425,16 @@ journalctl -u opencti-worker@1 -n 30 --no-pager
 # - Platform chưa sẵn sàng → chờ platform healthy rồi restart worker
 ```
 
-### Redis compile lỗi
+### Redis không start
 ```bash
-# Thiếu gcc/gcc-c++/make → kiểm tra RPMs đã cài đủ chưa
-rpm -qa | grep -E "gcc|make|glibc-devel"
-# Phải có: gcc, gcc-c++, cpp, make, glibc-devel, glibc-headers,
-#          kernel-headers, libstdc++-devel, libmpc, binutils
+# Kiểm tra RPM đã cài chưa
+rpm -qa | grep redis
+# Phải có: redis-6.2.x
+
+# Kiểm tra systemd unit
+systemctl status redis
+journalctl -u redis --no-pager -n 20
+
+# Kiểm tra config
+cat /etc/redis/redis.conf | grep -E 'bind|port|requirepass|dir'
 ```

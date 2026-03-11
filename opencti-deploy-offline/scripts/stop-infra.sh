@@ -5,11 +5,11 @@
 #
 # Script này LÀM NGƯỢC lại setup_infra.sh — dừng services, xóa toàn bộ:
 #   • Systemd services (redis, minio, rabbitmq-server)
-#   • MinIO        → /opt/minio/, /etc/minio/, /var/lib/minio/, /var/log/minio/
-#   • Redis        → /opt/redis/, /etc/redis/, /var/lib/redis/, /var/log/redis/
+#   • MinIO        → /usr/local/bin/minio, /etc/minio/, /var/lib/minio/, /var/log/minio/
+#   • Redis        → dnf remove redis (RPM), /etc/redis/, /var/lib/redis/, /var/log/redis/
 #   • RabbitMQ     → /opt/rabbitmq/, /etc/rabbitmq/, /var/lib/rabbitmq/, /var/log/rabbitmq/
 #   • Run scripts  → /opt/infra/scripts/
-#   • Symlinks: redis-server, redis-cli, mc, rabbitmq-*
+#   • Symlinks: mc, rabbitmq-*
 #
 # ⚠ KHÔNG xóa RPMs đã cài (gcc, erlang, etc.) — vì có thể hệ thống cần
 #
@@ -41,11 +41,11 @@ echo "╚═══════════════════════�
 echo ""
 echo "  Sẽ XÓA toàn bộ:"
 echo "    • Services:  redis, minio, rabbitmq-server"
-echo "    • MinIO:     /opt/minio/, /etc/minio/, /var/lib/minio/, /var/log/minio/"
-echo "    • Redis:     /opt/redis/, /etc/redis/, /var/lib/redis/, /var/log/redis/"
+echo "    • MinIO:     /usr/local/bin/minio, /etc/minio/, /var/lib/minio/, /var/log/minio/"
+echo "    • Redis:     RPM remove, /etc/redis/, /var/lib/redis/, /var/log/redis/"
 echo "    • RabbitMQ:  /opt/rabbitmq/, /etc/rabbitmq/, /var/lib/rabbitmq/, /var/log/rabbitmq/"
 echo "    • Scripts:   /opt/infra/scripts/"
-echo "    • Symlinks:  redis-server, redis-cli, mc, rabbitmq-*"
+echo "    • Symlinks:  mc, rabbitmq-*"
 echo ""
 echo "  KHÔNG xóa: RPMs đã cài (gcc, erlang, make, etc.)"
 echo ""
@@ -77,8 +77,8 @@ ok "Services stopped"
 info "Removing systemd units..."
 
 rm -f /etc/systemd/system/minio.service
-rm -f /etc/systemd/system/redis.service
 rm -f /etc/systemd/system/rabbitmq-server.service
+# redis.service is managed by RPM — removed with dnf remove redis
 systemctl daemon-reload
 ok "Systemd units removed"
 
@@ -87,11 +87,11 @@ ok "Systemd units removed"
 # ══════════════════════════════════════════════════════════════
 info "Removing MinIO..."
 
-rm -rf /opt/minio
+rm -f /usr/local/bin/minio
+rm -f /usr/local/bin/mc
 rm -rf /etc/minio
 rm -rf /var/lib/minio
 rm -rf /var/log/minio
-rm -f /usr/local/bin/mc
 ok "MinIO removed"
 
 # ══════════════════════════════════════════════════════════════
@@ -99,13 +99,12 @@ ok "MinIO removed"
 # ══════════════════════════════════════════════════════════════
 info "Removing Redis..."
 
-rm -rf /opt/redis
+# Redis installed via RPM — remove package + data
+dnf remove -y redis 2>/dev/null || rpm -e redis 2>/dev/null || true
 rm -rf /etc/redis
 rm -rf /var/lib/redis
 rm -rf /var/log/redis
-rm -f /usr/local/bin/redis-server
-rm -f /usr/local/bin/redis-cli
-ok "Redis removed"
+ok "Redis removed (RPM + data)"
 
 # ══════════════════════════════════════════════════════════════
 # 5. Remove RabbitMQ
@@ -134,6 +133,7 @@ ok "RabbitMQ removed"
 info "Removing run scripts..."
 
 rm -rf /opt/infra
+# run_redis.sh not used — Redis uses RPM systemd unit
 ok "Run scripts removed"
 
 # ══════════════════════════════════════════════════════════════
@@ -144,6 +144,6 @@ echo "╔═══════════════════════�
 echo "║   ✓ INFRA CLEANUP COMPLETE — Máy đã sạch                  ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
-echo "  💡 RPMs (gcc, erlang, make...) vẫn còn."
-echo "     Nếu muốn xóa luôn: dnf remove gcc gcc-c++ erlang make"
+echo "  💡 RPMs (erlang, redis...) vẫn còn."
+echo "     Nếu muốn xóa luôn: dnf remove erlang redis"
 echo ""

@@ -2,7 +2,7 @@
 ###############################################################################
 # MinIO Run Script — Called by systemd (minio.service)
 #
-# Binary:  /opt/minio/bin/minio
+# Binary:  /usr/local/bin/minio
 # Data:    /var/lib/minio/data
 # Config:  /etc/minio/minio.conf        (MOUNT từ ngoài vào, KHÔNG auto-generate)
 # Logs:    /var/log/minio/ (via systemd StandardOutput=append:)
@@ -13,7 +13,7 @@
 ###############################################################################
 set -euo pipefail
 
-MINIO_BIN="/opt/minio/bin/minio"
+MINIO_BIN="/usr/local/bin/minio"
 MINIO_DATA="/var/lib/minio/data"
 MINIO_CONFIG="/etc/minio/minio.conf"
 

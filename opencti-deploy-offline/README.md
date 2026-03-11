@@ -24,9 +24,9 @@ MÁY TARGET:
 │                    MÁY BUILD (có internet)                      │
 │                                                                 │
 │  Part 1: Infra        │  Part 2: App                            │
-│  (đã có sẵn)          │  bash scripts/pack_app.sh                   │
+│  (đã có sẵn)          │  bash scripts/pack_app.sh               │
 │  • minio binary       │    01 → Build Python 3.12 (Docker)      │
-│  • redis tarball      │    02 → Download Node.js 22 (binary)    │
+│  • redis RPM          │    02 → Download Node.js 22 (binary)    │
 │  • rabbitmq tarball   │    03 → Build backend (yarn build:prod) │
 │  • erlang RPMs        │    04 → Build frontend (React + Relay)  │
 │  • system RPMs        │    05 → Copy source + build artifacts   │
@@ -49,19 +49,19 @@ MÁY TARGET:
 
 ## Part 1: Infrastructure (Infra)
 
-Cài đặt **Redis + MinIO + RabbitMQ** từ binary/source đã chuẩn bị sẵn.
+Cài đặt **Redis (RPM) + MinIO (binary) + RabbitMQ (tarball)** đã chuẩn bị sẵn.
 
 **Files cần có:**
 ```
 files/
 ├── minio                                  ← MinIO binary
 ├── mc                                     ← MinIO client (optional)
-├── redis-8.4.2.tar.gz                     ← Redis source (compile on target)
 └── rabbitmq-server-generic-unix-4.2.0.tar.xz ← RabbitMQ
 
 rpm/
 ├── erlang-*.rpm                           ← Erlang (for RabbitMQ)
-└── *.rpm                                  ← System dependencies (gcc, etc.)
+├── redis-*.rpm                            ← Redis (RPM, cài qua dnf)
+└── *.rpm                                  ← System dependencies
 
 config/
 ├── redis.conf
@@ -113,26 +113,26 @@ Script `pack_app.sh` runs 6 sub-scripts then assembles:
 bash scripts/setup_app.sh
 
 # Options:
-#   --skip-worker   Chỉ deploy platform
-#   --skip-start    Deploy nhưng không start services
+#   --skip-worker   Chỉ deploy platform (không deploy worker)
 ```
 
 Script `setup_app.sh` sẽ tự động:
 1. ✅ Extract package
 2. ✅ Install Python 3.12 → `/opt/python312`
 3. ✅ Install Node.js 22 → `/opt/nodejs`
-4. ✅ Deploy OpenCTI Platform → `/etc/saids/application/opencti`
-5. ✅ Deploy Worker → `/etc/saids/application/opencti-worker`
+4. ✅ Deploy OpenCTI Platform → `/etc/saids/opencti`
+5. ✅ Deploy Worker → `/etc/saids/opencti-worker`
 6. ✅ Setup Python venvs + install packages (offline)
 7. ✅ Copy SSL certs + config files
-8. ✅ Install + start systemd services
+
+> ⚠ Services chưa được start — chạy `bash scripts/enable-services.sh` sau khi setup xong.
 
 ## Quick Start (full workflow)
 
 ```bash
 # ═══ Trên máy BUILD (có internet) ═══
 
-# 1. Chuẩn bị Part 1 files (minio, redis, rabbitmq, RPMs) — đã có sẵn
+# 1. Chuẩn bị Part 1 files (minio, redis RPM, rabbitmq, RPMs) — đã có sẵn
 # 2. Đóng gói Part 2:
 bash scripts/pack_app.sh
 
@@ -144,11 +144,14 @@ rsync -avz opencti-deploy-offline/ root@target:/root/opencti-deploy/
 
 cd /root/opencti-deploy
 
-# 4. Part 1: Cài infra
+# 4. Part 1: Cài infra (file placement only)
 bash scripts/setup_infra.sh
 
-# 5. Part 2: Cài app
+# 5. Part 2: Cài app (file placement only)
 bash scripts/setup_app.sh
+
+# 6. Start all services
+bash scripts/enable-services.sh
 ```
 
 ## Cấu trúc thư mục
@@ -166,9 +169,9 @@ opencti-deploy-offline/
 │   ├── setup_infra.sh           ★ Deploy Part 1 (trên máy target)
 │   ├── setup_app.sh             ★ Deploy Part 2 (trên máy target)
 │   ├── gen-ssl-cert.sh          ← Tạo SSL self-signed cert
-│   ├── run_minio.sh             ← Systemd run script
-│   ├── run_redis.sh             ← Systemd run script
-│   └── run_rabbitmq.sh          ← Systemd run script
+│   ├── run_minio.sh             ← Systemd run script (MinIO)
+│   ├── run_rabbitmq.sh          ← Systemd run script (RabbitMQ)
+│   └── enable-services.sh       ← Start all services + health checks
 ├── config/
 │   ├── start.sh                 ← Platform env vars (⚠ chứa secrets)
 │   ├── start-worker.sh          ← Worker env vars (⚠ chứa secrets)
@@ -179,10 +182,9 @@ opencti-deploy-offline/
 │   └── enabled_plugins
 ├── systemd/
 │   ├── minio.service
-│   ├── redis.service
 │   ├── rabbitmq-server.service
 │   ├── opencti-platform.service
-│   └── opencti-worker@.service
+│   └── opencti-worker@.service  (redis.service do RPM cung cấp)
 ├── cert/
 │   ├── opencti.key              ← SSL private key (⚠ KHÔNG commit)
 │   └── opencti.crt              ← SSL certificate
@@ -190,7 +192,6 @@ opencti-deploy-offline/
 │   ├── opencti-app-package.tar.gz  ★ Output Part 2 (tất cả trong 1 file)
 │   ├── minio                       ← MinIO binary
 │   ├── mc                          ← MinIO client
-│   ├── redis-8.4.2.tar.gz          ← Redis source
 │   ├── rabbitmq-server-*.tar.xz    ← RabbitMQ
 │   ├── Python-3.12.8.tgz           ← Python source (dùng khi build)
 │   ├── python312.tar.gz            ← Python runtime (01-build-python.sh)
@@ -210,19 +211,21 @@ opencti-deploy-offline/
 ```
 /opt/python312/                        ← Python 3.12 runtime (compiled, --enable-shared)
 /opt/nodejs/                           ← Node.js 22 runtime (pre-built binary)
-/opt/minio/bin/minio                   ← MinIO binary
-/opt/redis/bin/redis-server            ← Redis (compiled)
+/usr/local/bin/minio                   ← MinIO binary
+/usr/bin/redis-server                  ← Redis (from RPM)
 /opt/rabbitmq/sbin/                    ← RabbitMQ binaries
 
-/etc/saids/application/opencti/        ← OpenCTI Platform
-/etc/saids/application/opencti-worker/ ← OpenCTI Workers
+/etc/saids/opencti/        ← OpenCTI Platform
+/etc/saids/opencti-worker/ ← OpenCTI Workers
 
 /etc/systemd/system/
-├── redis.service
 ├── minio.service
 ├── rabbitmq-server.service
 ├── opencti-platform.service
 └── opencti-worker@.service            → @1, @2, @3
+
+/usr/lib/systemd/system/
+└── redis.service                      ← (do RPM cung cấp)
 
 Ports:
   6379   Redis

@@ -30,6 +30,7 @@ help:
 	@echo "  make pack-infra          Pack infra (opencti-infra-package.tar.gz)"
 	@echo "  make test                Full stack test"
 	@echo "  make test-infra          Infra only test"
+	@echo "  make enable              Enable all services"
 	@echo "  make status              Service status"
 	@echo "  make exec                Shell into container"
 	@echo "  make destroy             Remove all containers"
@@ -52,6 +53,9 @@ test: pack-app pack-infra
 	@sleep 5
 	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/setup_infra.sh
 	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/setup_app.sh
+	@# Docker test: ES runs in separate container, not localhost
+	docker exec $(CONTAINER) sed -i 's|http://localhost:9200|http://elasticsearch:9200|' /etc/saids/opencti/start.sh
+	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/enable-services.sh
 	@$(MAKE) --no-print-directory status
 
 test-infra:
@@ -59,7 +63,11 @@ test-infra:
 	$(COMPOSE) up -d
 	@sleep 5
 	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/setup_infra.sh
+	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/enable-services.sh --infra-only
 	@$(MAKE) --no-print-directory status
+
+enable:
+	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/enable-services.sh
 
 status:
 	@docker exec $(CONTAINER) bash -c '\
