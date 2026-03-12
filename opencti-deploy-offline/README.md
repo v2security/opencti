@@ -43,7 +43,7 @@ MÁY TARGET:
 │  bash scripts/setup_infra.sh     ← Part 1: Redis+MinIO+RabbitMQ │
 │  bash scripts/setup_app.sh       ← Part 2: Python+Node+OpenCTI  │
 │                                                                 │
-│  Done! → https://localhost:8443                                 │
+#  Done! → http://localhost:8080                                  #
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,88 +71,10 @@ config/
 └── enabled_plugins
 ```
 
-**Chạy trên máy target:**
-```bash
-bash scripts/setup_infra.sh
-```
 
 ## Part 2: Application (App)
 
 Cài đặt **Python 3.12 + Node.js 22 + OpenCTI Platform + Worker**.
-
-### Bước 1: Đóng gói (trên máy build)
-
-```bash
-bash scripts/pack_app.sh
-
-# Options:
-#   --skip-runtimes   Reuse existing python312.tar.gz + nodejs22.tar.gz
-#   --skip-deps       Skip Python package download
-
-# Or run individual steps:
-bash scripts/01-build-python.sh     # → files/python312.tar.gz  (compile in Docker)
-bash scripts/02-build-nodejs.sh     # → files/nodejs22.tar.gz   (pre-built binary)
-bash scripts/03-build-backend.sh    # → opencti-graphql/build/  (yarn build:prod)
-bash scripts/04-build-frontend.sh   # → opencti-front/builder/prod/build/ (React + Relay)
-bash scripts/05-copy-source.sh      # → files/opencti-source.tar.gz
-bash scripts/06-download-deps.sh    # → files/python-deps.tar.gz
-```
-
-Script `pack_app.sh` runs 6 sub-scripts then assembles:
-1. ✅ Build Python 3.12 runtime (Docker, `--enable-shared`)
-2. ✅ Download Node.js 22 pre-built binary (từ nodejs.org)
-3. ✅ Build OpenCTI backend (yarn install + build:prod)
-4. ✅ Build OpenCTI frontend (yarn build:standalone → public/)
-5. ✅ Copy OpenCTI source + build artifacts
-6. ✅ Download Python packages (offline pip)
-7. ✅ Pack ALL → `files/opencti-app-package.tar.gz`
-
-### Bước 2: Deploy (trên máy target)
-
-```bash
-bash scripts/setup_app.sh
-
-# Options:
-#   --skip-worker   Chỉ deploy platform (không deploy worker)
-```
-
-Script `setup_app.sh` sẽ tự động:
-1. ✅ Extract package
-2. ✅ Install Python 3.12 → `/opt/python312`
-3. ✅ Install Node.js 22 → `/opt/nodejs`
-4. ✅ Deploy OpenCTI Platform → `/etc/saids/opencti`
-5. ✅ Deploy Worker → `/etc/saids/opencti-worker`
-6. ✅ Setup Python venvs + install packages (offline)
-7. ✅ Copy SSL certs + config files
-
-> ⚠ Services chưa được start — chạy `bash scripts/enable-services.sh` sau khi setup xong.
-
-## Quick Start (full workflow)
-
-```bash
-# ═══ Trên máy BUILD (có internet) ═══
-
-# 1. Chuẩn bị Part 1 files (minio, redis RPM, rabbitmq, RPMs) — đã có sẵn
-# 2. Đóng gói Part 2:
-bash scripts/pack_app.sh
-
-# 3. Copy toàn bộ thư mục sang máy target:
-rsync -avz opencti-deploy-offline/ root@target:/root/opencti-deploy/
-# Hoặc: tar czf deploy.tar.gz opencti-deploy-offline/ && scp ... 
-
-# ═══ Trên máy TARGET (offline) ═══
-
-cd /root/opencti-deploy
-
-# 4. Part 1: Cài infra (file placement only)
-bash scripts/setup_infra.sh
-
-# 5. Part 2: Cài app (file placement only)
-bash scripts/setup_app.sh
-
-# 6. Start all services
-bash scripts/enable-services.sh
-```
 
 ## Cấu trúc thư mục
 
@@ -168,7 +90,6 @@ opencti-deploy-offline/
 │   ├── 06-download-deps.sh      ← Download Python packages
 │   ├── setup_infra.sh           ★ Deploy Part 1 (trên máy target)
 │   ├── setup_app.sh             ★ Deploy Part 2 (trên máy target)
-│   ├── gen-ssl-cert.sh          ← Tạo SSL self-signed cert
 │   ├── run_minio.sh             ← Systemd run script (MinIO)
 │   ├── run_rabbitmq.sh          ← Systemd run script (RabbitMQ)
 │   └── enable-services.sh       ← Start all services + health checks
@@ -185,9 +106,6 @@ opencti-deploy-offline/
 │   ├── rabbitmq-server.service
 │   ├── opencti-platform.service
 │   └── opencti-worker@.service  (redis.service do RPM cung cấp)
-├── cert/
-│   ├── opencti.key              ← SSL private key (⚠ KHÔNG commit)
-│   └── opencti.crt              ← SSL certificate
 ├── files/
 │   ├── opencti-app-package.tar.gz  ★ Output Part 2 (tất cả trong 1 file)
 │   ├── minio                       ← MinIO binary
@@ -218,22 +136,14 @@ opencti-deploy-offline/
 /etc/saids/opencti/        ← OpenCTI Platform
 /etc/saids/opencti-worker/ ← OpenCTI Workers
 
-/etc/systemd/system/
-├── minio.service
-├── rabbitmq-server.service
-├── opencti-platform.service
-└── opencti-worker@.service            → @1, @2, @3
-
-/usr/lib/systemd/system/
-└── redis.service                      ← (do RPM cung cấp)
-
 Ports:
   6379   Redis
+  8686   Elasticsearch
   9000   MinIO API
   9001   MinIO Console
   5672   RabbitMQ AMQP
   15672  RabbitMQ Management
-  8443   OpenCTI Platform (HTTPS)
+  8080   OpenCTI Platform (HTTP)
 ```
 
 ## Makefile commands

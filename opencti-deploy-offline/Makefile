@@ -54,7 +54,7 @@ test: pack-app pack-infra
 	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/setup_infra.sh
 	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/setup_app.sh
 	@# Docker test: ES runs in separate container, not localhost
-	docker exec $(CONTAINER) sed -i 's|http://localhost:9200|http://elasticsearch:9200|' /etc/saids/opencti/start.sh
+	docker exec $(CONTAINER) sed -i 's|http://localhost:8686|http://elasticsearch:8686|' /etc/saids/opencti/start.sh
 	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/enable-services.sh
 	@$(MAKE) --no-print-directory status
 

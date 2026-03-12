@@ -12,7 +12,6 @@
 #   ./scripts/ → /root/opencti-deploy/scripts   (run_*.sh, setup scripts)
 #   ./systemd/ → /root/opencti-deploy/systemd   (*.service files)
 #   ./config/  → /root/opencti-deploy/config    (start.sh, start-worker.sh, service configs)
-#   ./cert/    → /root/opencti-deploy/cert      (SSL certificates)
 #   ./config/elasticsearch.yml → ES config
 #
 # Usage:
@@ -56,7 +55,6 @@ services:
       - ./scripts/run_minio.sh:/root/opencti-deploy/scripts/run_minio.sh:ro
       - ./scripts/run_rabbitmq.sh:/root/opencti-deploy/scripts/run_rabbitmq.sh:ro
       - ./scripts/enable-services.sh:/root/opencti-deploy/scripts/enable-services.sh:ro
-      - ./scripts/gen-ssl-cert.sh:/root/opencti-deploy/scripts/gen-ssl-cert.sh:ro
 
       # ── systemd/ — mount từng service file ──
       - ./systemd/minio.service:/root/opencti-deploy/systemd/minio.service:ro
@@ -67,6 +65,7 @@ services:
       # ── config/ — mount từng file config ──
       - ./config/start.sh:/root/opencti-deploy/config/start.sh:ro
       - ./config/start-worker.sh:/root/opencti-deploy/config/start-worker.sh:ro
+      - ./config/check_indicator.py:/root/opencti-deploy/config/check_indicator.py:ro
       - ./config/redis.conf:/root/opencti-deploy/config/redis.conf:ro
       - ./config/minio.conf:/root/opencti-deploy/config/minio.conf:ro
       - ./config/rabbitmq.conf:/root/opencti-deploy/config/rabbitmq.conf:ro
@@ -81,17 +80,13 @@ services:
       - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./config/rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
       - ./config/enabled_plugins:/opt/rabbitmq/etc/rabbitmq/enabled_plugins:ro
-
-      # ── cert/ — SSL certificates ──
-      - ./cert/opencti.key:/root/opencti-deploy/cert/opencti.key:ro
-      - ./cert/opencti.crt:/root/opencti-deploy/cert/opencti.crt:ro
     ports:
       - "16379:6379"      # Redis
       - "19000:9000"      # MinIO API
       - "19001:9001"      # MinIO Console
       - "15672:5672"      # RabbitMQ AMQP
       - "25672:15672"     # RabbitMQ Management
-      - "18443:8443"      # OpenCTI Platform (HTTPS)
+      - "18080:8080"      # OpenCTI Platform (HTTP)
     environment:
       - container=docker
     mem_limit: 6g
@@ -107,16 +102,16 @@ services:
       - node.name=node-1
       - cluster.name=opencti-cluster
       - discovery.type=single-node
+      - http.port=8686
       - xpack.security.enabled=false
       - xpack.security.enrollment.enabled=false
       - xpack.security.http.ssl.enabled=false
       - xpack.security.transport.ssl.enabled=false
       - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
     volumes:
-      - ./config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
       - es-data:/usr/share/elasticsearch/data
     ports:
-      - "19200:9200"      # Elasticsearch API
+      - "18686:8686"      # Elasticsearch API
     mem_limit: 2g
     ulimits:
       memlock:
@@ -126,7 +121,7 @@ services:
         soft: 65536
         hard: 65536
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8686/_cluster/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 10

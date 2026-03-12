@@ -1,6 +1,10 @@
 #!/bin/bash
 ###############################################################################
-# Generate SSL Certificate cho OpenCTI
+# [DEPRECATED] Generate SSL Certificate cho OpenCTI
+#
+# ⚠️ SCRIPT NÀY KHÔNG CÒN CẦN THIẾT - OpenCTI đang chạy ở HTTP mode
+#
+# Script này giữ lại để tham khảo nếu cần chuyển sang HTTPS trong tương lai.
 #
 # Tạo self-signed SSL cert (RSA-4096, SHA-256, 10 năm)
 # với Subject Alternative Names cho localhost, hostname, IP.

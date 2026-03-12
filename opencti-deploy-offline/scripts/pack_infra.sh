@@ -24,11 +24,10 @@
 #   systemd/opencti-worker@.service                 Worker template unit
 #   config/start.sh                                 Env vars (REDIS__, MINIO__, RABBITMQ__)
 #   config/start-worker.sh                          Worker env vars + start
+#   config/check_indicator.py                       Patched Python script (eql SEGV fix)
 #   config/90-opencti.conf                          Sysctl tuning
 #   config/opencti-logrotate.conf                   Logrotate config
 #   config/elasticsearch.yml                        Elasticsearch config
-#   cert/opencti.key                                SSL private key
-#   cert/opencti.crt                                SSL certificate
 #   config/redis.conf                               Redis config
 #   config/minio.conf                               MinIO config
 #   config/rabbitmq.conf                            RabbitMQ config
@@ -139,15 +138,9 @@ done
 log "ℹ" "redis.service — provided by RPM, not packaged"
 
 # --- config/ ---
-for f in start.sh start-worker.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins 90-opencti.conf opencti-logrotate.conf elasticsearch.yml; do
+for f in start.sh start-worker.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins 90-opencti.conf opencti-logrotate.conf elasticsearch.yml check_indicator.py; do
     [[ -f "$BASE_DIR/config/$f" ]] || { log "✗" "Missing: config/$f"; ERRORS=$((ERRORS + 1)); }
     log "✓" "config/$f"
-done
-
-# --- cert/ ---
-for f in opencti.key opencti.crt; do
-    [[ -f "$BASE_DIR/cert/$f" ]] || { log "✗" "Missing: cert/$f"; ERRORS=$((ERRORS + 1)); }
-    log "✓" "cert/$f"
 done
 
 if [[ "$ERRORS" -gt 0 ]]; then
@@ -160,7 +153,7 @@ fi
 info 2 "Prepare staging directory"
 
 rm -rf "$STAGING"
-mkdir -p "$STAGING"/{files,rpm,scripts,systemd,config,cert}
+mkdir -p "$STAGING"/{files,rpm,scripts,systemd,config}
 log "→" "Staging: $STAGING"
 
 # ═════════════════════════════════════════════════════════════
@@ -198,16 +191,10 @@ done
 log "→" "systemd/ (4 files, redis.service from RPM)"
 
 # config/
-for f in start.sh start-worker.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins 90-opencti.conf opencti-logrotate.conf elasticsearch.yml; do
+for f in start.sh start-worker.sh redis.conf minio.conf rabbitmq.conf rabbitmq-env.conf enabled_plugins 90-opencti.conf opencti-logrotate.conf elasticsearch.yml check_indicator.py; do
     cp "$BASE_DIR/config/$f" "$STAGING/config/"
 done
-log "→" "config/ (10 files)"
-
-# cert/
-for f in opencti.key opencti.crt; do
-    cp "$BASE_DIR/cert/$f" "$STAGING/cert/"
-done
-log "→" "cert/ (opencti.key, opencti.crt)"
+log "→" "config/ (11 files)"
 
 # ═════════════════════════════════════════════════════════════
 # 4. Create tarball
@@ -244,14 +231,12 @@ echo "     rpm/       $RPM_COUNT RPM packages (Erlang + Redis + deps)"
 echo "     scripts/   setup/stop infra+app, run_*.sh (7 files)"
 echo "     systemd/   minio, rabbitmq, platform, worker (4 files, redis.service from RPM)"
 echo "     config/    start.sh, start-worker.sh, ES, sysctl, logrotate (10 files)"
-echo "     cert/      SSL certificates (opencti.key, opencti.crt)"
 echo ""
 echo "  🚀 Deploy trên máy offline:"
 echo "     1. scp files/$OUTPUT user@offline-server:/root/"
 echo "     2. ssh user@offline-server"
 echo "     3. mkdir -p /root/opencti-deploy"
 echo "     4. tar -xzf $OUTPUT -C /root/opencti-deploy"
-echo "        (cert/ tự động được bung ra cùng package)"
 echo "     5. bash /root/opencti-deploy/scripts/setup_infra.sh"
 echo "     6. bash /root/opencti-deploy/scripts/setup_app.sh"
 echo "     7. bash /root/opencti-deploy/scripts/enable-services.sh"

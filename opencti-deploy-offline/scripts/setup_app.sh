@@ -15,7 +15,7 @@
 #   • OpenCTI Worker (Python)               → /etc/saids/opencti-worker
 #   • Python venvs + offline pip packages
 #   • Systemd services
-#   • SSL certificates
+#   • Config files (HTTP mode - no SSL certificates)
 #
 # Prerequisites (Part 1 phải chạy trước):
 #   - Elasticsearch đang chạy
@@ -30,9 +30,6 @@
 #   ├── config/
 #   │   ├── start.sh                    ← Platform env vars + start command
 #   │   └── start-worker.sh             ← Worker env vars + start command
-#   ├── cert/
-#   │   ├── opencti.key                 ← SSL private key
-#   │   └── opencti.crt                 ← SSL certificate
 #   └── systemd/
 #       ├── opencti-platform.service
 #       └── opencti-worker@.service
@@ -61,7 +58,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="${DEPLOY_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FILES_DIR="$DEPLOY_DIR/files"
 CONFIG_DIR="$DEPLOY_DIR/config"
-CERT_DIR="$DEPLOY_DIR/cert"
 SYSTEMD_SRC="$DEPLOY_DIR/systemd"
 
 # Install paths
@@ -314,30 +310,28 @@ fi
 rm -rf "$TEMP_EXTRACT"
 
 # ══════════════════════════════════════════════════════════════
-# STEP 6: Copy SSL certificates + config files
+# STEP 6: Copy config files (HTTP mode - no SSL certificates)
 # ══════════════════════════════════════════════════════════════
-info 6 "Copy SSL certificates + config files"
+info 6 "Copy config files (HTTP mode)"
 
-# SSL
-SSL_DIR="$OPENCTI_HOME/ssl"
-mkdir -p "$SSL_DIR"
-
-if [[ -f "$CERT_DIR/opencti.key" ]] && [[ -f "$CERT_DIR/opencti.crt" ]]; then
-    cp "$CERT_DIR/opencti.key" "$SSL_DIR/opencti.key"
-    cp "$CERT_DIR/opencti.crt" "$SSL_DIR/opencti.crt"
-    chmod 600 "$SSL_DIR/opencti.key"
-    chmod 644 "$SSL_DIR/opencti.crt"
-    ok "SSL: $SSL_DIR/opencti.key, $SSL_DIR/opencti.crt"
-else
-    warn "SSL certificates not found in $CERT_DIR"
-    warn "  Generate with: bash scripts/gen-ssl-cert.sh"
-fi
+# HTTP mode: no SSL certificates needed
+detail "Using HTTP mode - no SSL certificates required"
 
 # Platform start.sh
 if [[ -f "$CONFIG_DIR/start.sh" ]]; then
     cp "$CONFIG_DIR/start.sh" "$OPENCTI_HOME/start.sh"
     chmod +x "$OPENCTI_HOME/start.sh"
     ok "Platform: $OPENCTI_HOME/start.sh"
+fi
+
+# Patch check_indicator.py — fix SEGV when eql is imported in embedded Python
+# (node-calls-python). Replaces top-level `import eql` with subprocess isolation.
+# See: config/check_indicator.py for details.
+CHECK_IND_SRC="$CONFIG_DIR/check_indicator.py"
+CHECK_IND_DST="$OPENCTI_HOME/src/python/runtime/check_indicator.py"
+if [[ -f "$CHECK_IND_SRC" ]] && [[ -d "$OPENCTI_HOME/src/python/runtime" ]]; then
+    cp "$CHECK_IND_SRC" "$CHECK_IND_DST"
+    ok "Patched: check_indicator.py (eql subprocess isolation)"
 fi
 
 # Worker start-worker.sh
@@ -354,9 +348,9 @@ set -euo pipefail
 export LD_LIBRARY_PATH="/opt/python312/lib:${LD_LIBRARY_PATH:-}"
 export PATH="/opt/python312/bin:/etc/saids/opencti-worker/.python-venv/bin:$PATH"
 export PYTHONUNBUFFERED=1
-export OPENCTI_URL="https://localhost:8443"
+# HTTP mode (no SSL)
+export OPENCTI_URL="http://localhost:8080"
 export OPENCTI_TOKEN="f2de8e60-4914-4f69-a42f-6e0c70a72c30"
-export OPENCTI_SSL_VERIFY="false"
 export WORKER_LOG_LEVEL="info"
 cd /etc/saids/opencti-worker/src
 exec python3 worker.py

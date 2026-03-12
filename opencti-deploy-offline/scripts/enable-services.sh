@@ -200,7 +200,7 @@ if [[ "$INFRA_ONLY" != "true" ]]; then
 
     detail "Waiting for OpenCTI API..."
     wait_for "OpenCTI API" \
-        "curl -skf https://localhost:8443/health 2>/dev/null || curl -skf http://localhost:8443/health 2>/dev/null" \
+        "curl -sf http://localhost:8080/health 2>/dev/null" \
         120 || warn "Platform API not ready — starting workers anyway"
 
     # ── OpenCTI Workers ──────────────────────────────────────
@@ -248,7 +248,7 @@ for i in $(seq 1 "$WORKER_COUNT"); do
 done
 echo ""
 echo "  🌐 Access:"
-echo "    Platform:   https://localhost:8443"
+echo "    Platform:   http://localhost:8080"
 echo "    MinIO:      http://localhost:9001"
 echo "    RabbitMQ:   http://localhost:15672"
 echo ""

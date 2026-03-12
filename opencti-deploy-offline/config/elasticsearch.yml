@@ -2,7 +2,7 @@
 # Mount vào: /usr/share/elasticsearch/config/elasticsearch.yml
 #
 # Biến khớp với start.sh:
-#   ELASTICSEARCH__URL = http://elasticsearch:9200
+#   ELASTICSEARCH__URL = http://elasticsearch:8686
 #   ELASTICSEARCH__NUMBER_OF_REPLICAS = 0
 
 cluster.name: opencti-cluster
@@ -10,7 +10,7 @@ node.name: node-1
 discovery.type: single-node
 
 network.host: 0.0.0.0
-http.port: 9200
+http.port: 8686
 
 # Security disabled (internal use, offline deployment)
 xpack.security.enabled: false
