@@ -1,0 +1,123 @@
+#===============================================================================
+# rabbitmq.service - RabbitMQ Message Broker Service (systemd unit)
+#===============================================================================
+#
+# MÔ TẢ:
+#   Systemd service unit để quản lý RabbitMQ Message Broker.
+#   Hỗ trợ start, stop, restart, enable/disable.
+#
+# YÊU CẦU:
+#   Installation (sau khi chạy v2_setup_rabbitmq.sh):
+#     - /opt/rabbitmq/sbin/rabbitmq-server
+#     - /opt/rabbitmq/sbin/rabbitmqctl
+#
+#   Scripts (trong /usr/local/bin/):
+#     - v2_start_rabbitmq.sh  : Start script (ExecStart)
+#     - v2_stop_rabbitmq.sh   : Stop script (ExecStop)
+#
+# CONFIG FILES:
+#   - /etc/rabbitmq/rabbitmq.conf     : Main config
+#   - /etc/rabbitmq/rabbitmq-env.conf : Environment config
+#
+# DIRECTORIES:
+#   - /opt/rabbitmq/        : Installation
+#   - /var/lib/rabbitmq/    : Data (mnesia)
+#   - /var/log/rabbitmq/    : Logs
+#
+# PORTS:
+#   - 5672  : AMQP
+#   - 15672 : Management WebUI
+#
+# OWNER:
+#   Mặc định: admin:admin
+#   Thay đổi User/Group và Environment để đổi owner.
+#
+# CÀI ĐẶT:
+#   # 1. Setup (chạy 1 lần)
+#   RABBITMQ_USER=admin RABBITMQ_GROUP=admin bash v2_setup_rabbitmq.sh
+#
+#   # 2. Copy scripts
+#   cp v2_start_rabbitmq.sh v2_stop_rabbitmq.sh /usr/local/bin/
+#   chmod +x /usr/local/bin/v2_*.sh
+#
+#   # 3. Copy service file
+#   cp rabbitmq.service /etc/systemd/system/
+#   systemctl daemon-reload
+#
+#   # 4. Enable và start service
+#   systemctl enable --now rabbitmq
+#
+# USAGE:
+#   systemctl start rabbitmq     # Start service
+#   systemctl stop rabbitmq      # Stop service
+#   systemctl restart rabbitmq   # Restart service
+#   systemctl status rabbitmq    # Check status
+#   journalctl -u rabbitmq -f    # View logs
+#
+# ĐỔI OWNER (ví dụ sang root):
+#   Thay đổi 4 dòng trong [Service]:
+#     User=root
+#     Group=root
+#     Environment="RABBITMQ_USER=root"
+#     Environment="RABBITMQ_GROUP=root"
+#
+# GỠ BỎ:
+#   bash v2_uninstall_rabbitmq.sh
+#
+#===============================================================================
+
+[Unit]
+Description=RabbitMQ Message Broker
+Documentation=https://www.rabbitmq.com/documentation.html
+Wants=network-online.target
+After=network-online.target
+
+AssertPathExists=/opt/rabbitmq/sbin/rabbitmq-server
+AssertFileIsExecutable=/usr/local/bin/v2_start_rabbitmq.sh
+
+[Service]
+Type=simple
+
+# User/Group để chạy service
+# Thay đổi thành root nếu cần
+User=admin
+Group=admin
+
+# Service owner variables (truyền vào scripts)
+Environment="RABBITMQ_USER=admin"
+Environment="RABBITMQ_GROUP=admin"
+
+# Environment file
+EnvironmentFile=-/etc/rabbitmq/rabbitmq-env.conf
+
+# Working directory
+WorkingDirectory=/var/lib/rabbitmq
+
+# Start script
+ExecStart=/usr/local/bin/v2_start_rabbitmq.sh
+
+# Stop script
+ExecStop=/usr/local/bin/v2_stop_rabbitmq.sh
+
+# Restart policy
+Restart=on-failure
+RestartSec=10
+
+# Timeout settings (RabbitMQ cần thời gian để start)
+TimeoutStartSec=180
+TimeoutStopSec=120
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rabbitmq
+
+# Process limits
+LimitNOFILE=65536
+LimitNPROC=65536
+
+# Erlang VM memory limits (optional)
+# Environment="ERL_MAX_PORTS=65536"
+
+[Install]
+WantedBy=multi-user.target
