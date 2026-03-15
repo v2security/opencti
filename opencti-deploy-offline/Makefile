@@ -1,89 +1,17 @@
 # ══════════════════════════════════════════════════════════════
 # Infrastructure Test — ES + Redis + MinIO + RabbitMQ + OpenCTI
 # ══════════════════════════════════════════════════════════════
-#
-# Test full stack trong Rocky Linux 9 container với systemd.
-# Elasticsearch chạy container riêng (đã có sẵn).
-#
-# Usage:
-#   make pack-app            # Pack OpenCTI source + deps
-#   make pack-infra          # Pack infrastructure files
-#   make test                # Full: pack + build + deploy infra + app + status
-#   make test-infra          # Infra only: build + deploy infra + status
-#   make status              # Service status
-#   make exec                # Shell vào container
-#   make destroy             # Xóa tất cả containers
-#   make destroy-pack    # Xóa build artifacts
-# ══════════════════════════════════════════════════════════════
 
-COMPOSE   := docker compose
-CONTAINER := opencti-test
+.PHONY: start stop exec destroy destroy-pack
 
-.PHONY: pack-app pack-infra test test-infra status exec destroy destroy-pack help
-.DEFAULT_GOAL := help
+start:
+	docker compose up -d
 
-help:
-	@echo ""
-	@echo "  OpenCTI Offline Deploy"
-	@echo "  ====================================="
-	@echo "  make pack-app            Pack app (opencti-app-package.tar.gz)"
-	@echo "  make pack-infra          Pack infra (opencti-infra-package.tar.gz)"
-	@echo "  make test                Full stack test"
-	@echo "  make test-infra          Infra only test"
-	@echo "  make enable              Enable all services"
-	@echo "  make status              Service status"
-	@echo "  make exec                Shell into container"
-	@echo "  make destroy             Remove all containers"
-	@echo "  make destroy-pack        Remove build artifacts"
-	@echo ""
-
-# -- Pack (on build machine) ---
-
-pack-app:
-	bash scripts/pack_app.sh
-
-pack-infra:
-	bash scripts/pack_infra.sh
-
-# -- Test (Docker) ---
-
-test: pack-app pack-infra
-	$(COMPOSE) build
-	$(COMPOSE) up -d
-	@sleep 5
-	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/setup_infra.sh
-	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/setup_app.sh
-	@# Docker test: ES runs in separate container, not localhost
-	docker exec $(CONTAINER) sed -i 's|http://localhost:8686|http://elasticsearch:8686|' /etc/saids/opencti/start.sh
-	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/enable-services.sh
-	@$(MAKE) --no-print-directory status
-
-test-infra:
-	$(COMPOSE) build
-	$(COMPOSE) up -d
-	@sleep 5
-	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/setup_infra.sh
-	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/enable-services.sh --infra-only
-	@$(MAKE) --no-print-directory status
-
-enable:
-	docker exec $(CONTAINER) bash /root/opencti-deploy/scripts/enable-services.sh
-
-status:
-	@docker exec $(CONTAINER) bash -c '\
-		for svc in redis minio rabbitmq-server opencti-platform opencti-worker@1 opencti-worker@2 opencti-worker@3; do \
-			S=$$(systemctl is-active $$svc 2>/dev/null || echo inactive); \
-			[ "$$S" = "active" ] && printf "  OK  %-24s %s\n" "$$svc" "$$S" \
-			                     || printf "  --  %-24s %s\n" "$$svc" "$$S"; \
-		done \
-	'
+stop:
+	docker compose down
 
 exec:
-	docker exec -it $(CONTAINER) bash
-
-down:
-	$(COMPOSE) down -v --rmi local 2>/dev/null || true
-	@echo "Stopped"
+	docker exec -it opencti-test bash
 
 destroy:
 	$(COMPOSE) down -v --rmi local 2>/dev/null || true

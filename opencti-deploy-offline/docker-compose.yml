@@ -1,32 +1,44 @@
 ###############################################################################
-# Docker Compose — Test Infrastructure + OpenCTI trên Rocky Linux 9
+# Docker Compose — Test OpenCTI Offline Deployment trên Rocky Linux 9
 #
 # Services:
-#   1. rocky9-infra   — Rocky 9 container giả lập bare-metal
-#                       (Redis + MinIO + RabbitMQ + OpenCTI Platform + Worker)
-#   2. elasticsearch  — Elasticsearch 8.x container (đã có sẵn, chỉ mount config)
+#   1. rocky9-test    — Rocky 9 container giả lập bare-metal (systemd)
+#   2. elasticsearch  — Elasticsearch 8.x container
 #
-# Mount:
-#   ./files/   → /root/opencti-deploy/files     (MinIO binary, RabbitMQ tarball, OpenCTI bundle, Python runtime)
-#   ./rpm/     → /root/opencti-deploy/rpm       (Erlang RPM, system deps)
-#   ./scripts/ → /root/opencti-deploy/scripts   (run_*.sh, setup scripts)
-#   ./systemd/ → /root/opencti-deploy/systemd   (*.service files)
-#   ./config/  → /root/opencti-deploy/config    (start.sh, start-worker.sh, service configs)
-#   ./config/elasticsearch.yml → ES config
+# Nguyên tắc: Mount trực tiếp vào đúng path — giống ISO cài bare-metal.
+# Container khởi động = mọi thứ đúng chỗ, sẵn sàng chạy setup scripts.
 #
-# Usage:
-#   cd opencti-deploy-offline
+# Mount layout:
+#   Binaries + scripts (runtime)  → /usr/local/bin/
+#   Tarballs + setup scripts      → /tmp/<component>/
+#   Config (tập trung config/)    → /etc/<service>/
+#   Systemd units (systemd/)      → /etc/systemd/system/
+#
+# Test flow:
 #   docker compose up -d
-#   docker exec opencti-test bash /root/opencti-deploy/scripts/setup_infra.sh
-#   docker exec opencti-test bash /root/opencti-deploy/scripts/setup_app.sh
+#   docker exec -it opencti-test bash
 #
-# Hoặc dùng Makefile:
-#   make build up deploy deploy-app status
+#   # 1. Install RPMs
+#   cd /tmp/rpms && ./v2_install_rpms.sh
+#
+#   # 2. Install runtime
+#   cd /tmp/runtime && ./v2_install_python.sh && ./v2_install_nodejs.sh
+#
+#   # 3. Setup infra
+#   v2_setup_minio.sh
+#   cd /tmp/rabbitmq && ./v2_setup_rabbitmq.sh
+#
+#   # 4. Start services
+#   systemctl enable redis minio rabbitmq
+#   systemctl start redis minio rabbitmq
+#   systemctl status redis minio rabbitmq
 ###############################################################################
 
 services:
-  # ── Rocky Linux 9 — giả lập bare-metal target server (no internet) ───────────
-  rocky9-infra:
+  # ══════════════════════════════════════════════════════════════
+  # Rocky Linux 9 — giả lập bare-metal target server (no internet)
+  # ══════════════════════════════════════════════════════════════
+  rocky9-test:
     build:
       context: .
       dockerfile: Dockerfile
@@ -40,79 +52,90 @@ services:
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
 
-      # ── files/ — chỉ mount file cần cho deployment (bỏ build artifacts) ──
-      - ./files/minio:/root/opencti-deploy/files/minio:ro
-      - ./files/mc:/root/opencti-deploy/files/mc:ro
-      - ./files/rabbitmq-server-generic-unix-4.2.0.tar.xz:/root/opencti-deploy/files/rabbitmq-server-generic-unix-4.2.0.tar.xz:ro
-      - ./files/opencti-app-package.tar.gz:/root/opencti-deploy/files/opencti-app-package.tar.gz:ro
+      # ══════════════════════════════════════════════════════════
+      # RPMs — packages + install script → /tmp/rpms/
+      # ══════════════════════════════════════════════════════════
+      - ./rpms:/tmp/rpms:ro
 
-      # ── rpm/ — mount cả folder (tất cả ~90 RPMs đều cần cho dnf localinstall) ──
-      - ./rpm:/root/opencti-deploy/rpm:ro
+      # ══════════════════════════════════════════════════════════
+      # Runtime — Python 3.12, Node.js 22
+      # Tarballs + install scripts → /tmp/runtime/
+      # Uninstall scripts → /usr/local/bin/
+      # ══════════════════════════════════════════════════════════
+      - ./runtime/python312.tar.gz:/tmp/runtime/python312.tar.gz:ro
+      - ./runtime/nodejs22.tar.gz:/tmp/runtime/nodejs22.tar.gz:ro
+      - ./runtime/v2_install_python.sh:/tmp/runtime/v2_install_python.sh:ro
+      - ./runtime/v2_install_nodejs.sh:/tmp/runtime/v2_install_nodejs.sh:ro
+      - ./runtime/v2_uninstall_python.sh:/usr/local/bin/v2_uninstall_python.sh:ro
+      - ./runtime/v2_uninstall_nodejs.sh:/usr/local/bin/v2_uninstall_nodejs.sh:ro
 
-      # ── scripts/ — chỉ mount deployment scripts (bỏ build scripts 01-06, pack) ──
-      - ./scripts/setup_infra.sh:/root/opencti-deploy/scripts/setup_infra.sh:ro
-      - ./scripts/setup_app.sh:/root/opencti-deploy/scripts/setup_app.sh:ro
-      - ./scripts/run_minio.sh:/root/opencti-deploy/scripts/run_minio.sh:ro
-      - ./scripts/run_rabbitmq.sh:/root/opencti-deploy/scripts/run_rabbitmq.sh:ro
-      - ./scripts/enable-services.sh:/root/opencti-deploy/scripts/enable-services.sh:ro
+      # ══════════════════════════════════════════════════════════
+      # MinIO — binaries + scripts → /usr/local/bin/
+      # (v2_setup_minio.sh tìm binary trong /usr/local/bin/)
+      # ══════════════════════════════════════════════════════════
+      - ./minio/minio:/usr/local/bin/minio:ro
+      - ./minio/mc:/usr/local/bin/mc:ro
+      - ./minio/v2_setup_minio.sh:/usr/local/bin/v2_setup_minio.sh:ro
+      - ./minio/v2_start_minio.sh:/usr/local/bin/v2_start_minio.sh:ro
+      - ./minio/v2_stop_minio.sh:/usr/local/bin/v2_stop_minio.sh:ro
+      - ./minio/v2_uninstall_minio.sh:/usr/local/bin/v2_uninstall_minio.sh:ro
 
-      # ── systemd/ — mount từng service file ──
-      - ./systemd/minio.service:/root/opencti-deploy/systemd/minio.service:ro
-      - ./systemd/rabbitmq-server.service:/root/opencti-deploy/systemd/rabbitmq-server.service:ro
-      - ./systemd/opencti-platform.service:/root/opencti-deploy/systemd/opencti-platform.service:ro
-      - ./systemd/opencti-worker@.service:/root/opencti-deploy/systemd/opencti-worker@.service:ro
+      # ══════════════════════════════════════════════════════════
+      # RabbitMQ — tarball + setup → /tmp/rabbitmq/
+      # Start/stop/uninstall → /usr/local/bin/
+      # ══════════════════════════════════════════════════════════
+      - ./rabbitmq/rabbitmq-server-generic-unix-4.2.0.tar.xz:/tmp/rabbitmq/rabbitmq-server-generic-unix-4.2.0.tar.xz:ro
+      - ./rabbitmq/v2_setup_rabbitmq.sh:/tmp/rabbitmq/v2_setup_rabbitmq.sh:ro
+      - ./rabbitmq/v2_start_rabbitmq.sh:/usr/local/bin/v2_start_rabbitmq.sh:ro
+      - ./rabbitmq/v2_stop_rabbitmq.sh:/usr/local/bin/v2_stop_rabbitmq.sh:ro
+      - ./rabbitmq/v2_uninstall_rabbitmq.sh:/usr/local/bin/v2_uninstall_rabbitmq.sh:ro
 
-      # ── config/ — mount từng file config ──
-      - ./config/start.sh:/root/opencti-deploy/config/start.sh:ro
-      - ./config/start-worker.sh:/root/opencti-deploy/config/start-worker.sh:ro
-      - ./config/check_indicator.py:/root/opencti-deploy/config/check_indicator.py:ro
-      - ./config/redis.conf:/root/opencti-deploy/config/redis.conf:ro
-      - ./config/minio.conf:/root/opencti-deploy/config/minio.conf:ro
-      - ./config/rabbitmq.conf:/root/opencti-deploy/config/rabbitmq.conf:ro
-      - ./config/rabbitmq-env.conf:/root/opencti-deploy/config/rabbitmq-env.conf:ro
-      - ./config/enabled_plugins:/root/opencti-deploy/config/enabled_plugins:ro
-      - ./config/90-opencti.conf:/root/opencti-deploy/config/90-opencti.conf:ro
-      - ./config/opencti-logrotate.conf:/root/opencti-deploy/config/opencti-logrotate.conf:ro
-
-      # ── config → system paths (pre-populate cho services) ──
-      # redis.conf: RPM creates default, setup_infra.sh overrides with custom
+      # ══════════════════════════════════════════════════════════
+      # Configs (tập trung config/) → mount vào đúng path service
+      # ══════════════════════════════════════════════════════════
+      - ./config/redis.conf:/etc/redis/redis.conf:ro
       - ./config/minio.conf:/etc/minio/minio.conf:ro
       - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./config/rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
-      - ./config/enabled_plugins:/opt/rabbitmq/etc/rabbitmq/enabled_plugins:ro
+      - ./config/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./config/logrotate.conf:/etc/logrotate.d/opencti:ro
+
+      # ══════════════════════════════════════════════════════════
+      # Systemd service units
+      # ══════════════════════════════════════════════════════════
+      - ./systemd/minio.service:/etc/systemd/system/minio.service:ro
+      - ./systemd/rabbitmq.service:/etc/systemd/system/rabbitmq.service:ro
+
     ports:
       - "16379:6379"      # Redis
       - "19000:9000"      # MinIO API
       - "19001:9001"      # MinIO Console
       - "15672:5672"      # RabbitMQ AMQP
       - "25672:15672"     # RabbitMQ Management
-      - "18080:8080"      # OpenCTI Platform (HTTP)
     environment:
       - container=docker
-    mem_limit: 6g
-    stop_grace_period: 15s
+    mem_limit: 8g
+    stop_grace_period: 30s
     restart: unless-stopped
 
-  # ── Elasticsearch 8.x — container riêng (giả lập ES đã cài sẵn trên server) ──
+  # ══════════════════════════════════════════════════════════════
+  # Elasticsearch 8.x — container riêng (giả lập ES đã cài sẵn)
+  # Config mount từ config/elasticsearch.yml (port 8686, no auth)
+  # ══════════════════════════════════════════════════════════════
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
     container_name: opencti-elasticsearch
     hostname: elasticsearch
     environment:
-      - node.name=node-1
-      - cluster.name=opencti-cluster
       - discovery.type=single-node
-      - http.port=8686
       - xpack.security.enabled=false
-      - xpack.security.enrollment.enabled=false
-      - xpack.security.http.ssl.enabled=false
-      - xpack.security.transport.ssl.enabled=false
-      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
     volumes:
+      - ./config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
       - es-data:/usr/share/elasticsearch/data
     ports:
-      - "18686:8686"      # Elasticsearch API
-    mem_limit: 2g
+      - "18686:8686"
+    mem_limit: 4g
     ulimits:
       memlock:
         soft: -1
@@ -121,13 +144,12 @@ services:
         soft: 65536
         hard: 65536
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8686/_cluster/health || exit 1"]
-      interval: 15s
+      test: ["CMD-SHELL", "curl -s http://localhost:8686/_cluster/health | grep -qE '(green|yellow)'"]
+      interval: 30s
       timeout: 10s
       retries: 10
-      start_period: 30s
+      start_period: 60s
     restart: unless-stopped
-
 
 volumes:
   es-data:

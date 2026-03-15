@@ -1,16 +1,25 @@
 # syntax=docker/dockerfile:1
 ###############################################################################
-# Rocky Linux 9 — Test container cho Infrastructure (MinIO + Redis + RabbitMQ)
+# Rocky Linux 9 — Test container cho OpenCTI Offline Deployment
 #
 # Container giả lập máy đích (bare-metal Rocky 9) với systemd.
-# Mount files/, rpm/, scripts/, systemd/ từ host.
+# Mọi thứ được mount trực tiếp vào đúng path bởi docker-compose.yml:
+#   - Binaries + scripts   → /usr/local/bin/
+#   - Tarballs + setup     → /tmp/<component>/
+#   - Configs              → /etc/<service>/
+#   - Systemd units        → /etc/systemd/system/
 #
 # Usage:
-#   cd opencti-deploy-offline
 #   docker compose up -d
-#   docker exec opencti-test bash /root/opencti-deploy/scripts/setup_infra.sh
-#   docker exec opencti-test bash /root/opencti-deploy/scripts/setup_app.sh
-#   docker exec opencti-test systemctl status redis minio rabbitmq-server
+#   docker exec -it opencti-test bash
+#
+#   cd /tmp/rpms && ./v2_install_rpms.sh
+#   cd /tmp/runtime && ./v2_install_python.sh && ./v2_install_nodejs.sh
+#   v2_setup_minio.sh
+#   cd /tmp/rabbitmq && ./v2_setup_rabbitmq.sh
+#   cd /tmp/opencti && ./v2_setup_cti.sh
+#   systemctl enable redis minio rabbitmq
+#   systemctl start redis minio rabbitmq
 ###############################################################################
 
 FROM rockylinux:9
@@ -31,27 +40,19 @@ RUN SYSD=/usr/lib/systemd/system; \
     rm -f "$SYSD"/basic.target.wants/* && \
     rm -f "$SYSD"/anaconda.target.wants/* 2>/dev/null || true
 
-# ── Minimal packages — bắt buộc để container hoạt động ───────
-# systemd: boot với /usr/sbin/init (base image không có)
-# xz:      extract .tar.xz (base image chỉ có xz-libs, không có binary)
+# ── Minimal packages ─────────────────────────────────────────
 RUN dnf install -y systemd xz && dnf clean all
 
-# ── Packages ─────────────────────────────────────────────────
-# Base image đã có sẵn: tar, gzip, findutils, hostname,
-# curl-minimal, vim-minimal, xz-libs, dnf.
-# Các gói còn lại (make, gcc, gcc-c++, procps-ng, iproute,
-# net-tools, which, erlang...) nằm trong rpm/ và được
-# setup_infra.sh cài offline qua dnf localinstall.
+# ── Create user 'admin' — owner cho MinIO, RabbitMQ ──────────
+RUN groupadd -r admin && useradd -r -g admin -d /home/admin -s /bin/bash admin \
+    && mkdir -p /home/admin && chown admin:admin /home/admin
 
-# ── Node.js 22 (cho OpenCTI Platform runtime) ───────────────
-# Node.js sẽ được cài tự động từ opencti-app-package.tar.gz khi chạy setup_app.sh.
-# Không cần cài Node.js trong Dockerfile — giả lập đúng môi trường offline.
-# Nếu muốn pre-install: uncomment 2 dòng dưới:
-# RUN curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - \
-#     && dnf install -y nodejs && dnf clean all
-
-# ── Working directory ────────────────────────────────────────
-RUN mkdir -p /root/opencti-deploy
+# ── Directories — giống ISO tạo sẵn trên bare-metal ──────────
+RUN mkdir -p /tmp/rpms /tmp/runtime /tmp/rabbitmq /tmp/opencti \
+    && mkdir -p /etc/redis /etc/minio /etc/rabbitmq \
+    && mkdir -p /etc/saids/opencti /etc/saids/opencti-worker \
+    && mkdir -p /var/log/opencti /var/log/opencti-worker \
+    && mkdir -p /opt/rabbitmq /opt/python312 /opt/nodejs
 
 VOLUME ["/sys/fs/cgroup"]
 WORKDIR /root

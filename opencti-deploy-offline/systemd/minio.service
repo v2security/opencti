@@ -1,27 +1,129 @@
+#===============================================================================
+# minio.service - MinIO Object Storage Service (systemd unit)
+#===============================================================================
+#
+# MÔ TẢ:
+#   Systemd service unit để quản lý MinIO Object Storage Server.
+#   Hỗ trợ start, stop, restart, enable/disable.
+#
+# YÊU CẦU (files trong /usr/local/bin/):
+#   Bắt buộc:
+#     - minio               : MinIO server binary
+#     - v2_start_minio.sh   : Start script (ExecStart)
+#     - v2_stop_minio.sh    : Stop script (ExecStop)
+#
+#   Tùy chọn:
+#     - mc                  : MinIO client binary
+#     - v2_setup_minio.sh   : First boot setup (chạy trước khi enable service)
+#     - v2_uninstall_minio.sh : Gỡ bỏ hoàn toàn MinIO
+#
+# CONFIG FILES:
+#   - /etc/minio/minio.conf : MinIO environment config
+#
+# DIRECTORIES:
+#   - /var/lib/minio/data/  : Data storage
+#   - /var/log/minio/       : Log files
+#
+# PORTS:
+#   - 9000 : MinIO API (S3 compatible)
+#   - 9001 : MinIO Console (WebUI)
+#
+# OWNER:
+#   Mặc định: admin:admin
+#   Thay đổi User/Group và Environment để đổi owner.
+#
+# CÀI ĐẶT:
+#   # 1. Copy files vào /usr/local/bin/
+#   cp minio mc v2_*.sh /usr/local/bin/
+#   chmod +x /usr/local/bin/{minio,mc,v2_*.sh}
+#
+#   # 2. Copy service file
+#   cp minio.service /etc/systemd/system/
+#
+#   # 3. Reload systemd
+#   systemctl daemon-reload
+#
+#   # 4. First boot setup (chạy 1 lần)
+#   # Với admin user (mặc định):
+#   bash /usr/local/bin/v2_setup_minio.sh
+#   # Hoặc với root user:
+#   MINIO_USER=root MINIO_GROUP=root bash /usr/local/bin/v2_setup_minio.sh
+#
+#   # 5. Enable và start service
+#   systemctl enable --now minio
+#
+# USAGE:
+#   systemctl start minio    # Start service
+#   systemctl stop minio     # Stop service
+#   systemctl restart minio  # Restart service
+#   systemctl status minio   # Check status
+#   journalctl -u minio -f   # View logs (realtime)
+#
+# ĐỔI OWNER (ví dụ sang root):
+#   Thay đổi 4 dòng trong [Service]:
+#     User=root
+#     Group=root
+#     Environment="MINIO_USER=root"
+#     Environment="MINIO_GROUP=root"
+#
+# GỠ BỎ HOÀN TOÀN:
+#   bash /usr/local/bin/v2_uninstall_minio.sh
+#
+#===============================================================================
+
 [Unit]
-Description=MinIO Object Storage
-Documentation=https://min.io/docs
-After=network-online.target
+Description=MinIO Object Storage Server
+Documentation=https://min.io/docs/minio/linux/index.html
 Wants=network-online.target
+After=network-online.target
+
+AssertFileIsExecutable=/usr/local/bin/minio
+AssertFileIsExecutable=/usr/local/bin/v2_start_minio.sh
 
 [Service]
 Type=simple
-User=root
-Group=root
 
-ExecStart=/opt/infra/scripts/run_minio.sh
+# User/Group để chạy service
+# Thay đổi thành root nếu cần: User=root, Group=root
+User=admin
+Group=admin
 
-Restart=always
+# Service owner variables (truyền vào scripts)
+# Phải khớp với User/Group ở trên
+Environment="MINIO_USER=admin"
+Environment="MINIO_GROUP=admin"
+
+# Environment file (load config từ setup)
+EnvironmentFile=-/etc/minio/minio.conf
+
+# Working directory
+WorkingDirectory=/var/lib/minio
+
+# Start script (ExecStart)
+ExecStart=/usr/local/bin/v2_start_minio.sh
+
+# Stop script (ExecStop)
+ExecStop=/usr/local/bin/v2_stop_minio.sh
+
+# Reload config (gửi SIGHUP)
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy
+Restart=on-failure
 RestartSec=5
-LimitNOFILE=65536
 
-# Ensure log directory exists
-ExecStartPre=/bin/mkdir -p /var/log/minio
+# Timeout settings
+TimeoutStartSec=60
+TimeoutStopSec=30
 
-# Logging → /var/log/minio/
-StandardOutput=append:/var/log/minio/minio.log
-StandardError=append:/var/log/minio/minio.log
+# Logging
+StandardOutput=journal
+StandardError=journal
 SyslogIdentifier=minio
+
+# Process limits
+LimitNOFILE=65536
+LimitNPROC=4096
 
 [Install]
 WantedBy=multi-user.target

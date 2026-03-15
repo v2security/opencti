@@ -93,16 +93,21 @@ log_info "Starting MinIO first-boot setup..."
 log_info "Owner: ${MINIO_USER}:${MINIO_GROUP}"
 
 #-------------------------------------------------------------------------------
-# Check binaries exist
+# Verify binaries exist in /usr/local/bin/
 #-------------------------------------------------------------------------------
-if [[ ! -f "${SCRIPT_DIR}/minio" ]]; then
-    log_error "minio binary not found at ${SCRIPT_DIR}/minio"
+if [[ ! -f "/usr/local/bin/minio" ]]; then
+    log_error "minio binary not found at /usr/local/bin/minio"
+    log_error "Please mount minio binary to /usr/local/bin/"
     exit 1
 fi
 
-if [[ ! -f "${SCRIPT_DIR}/mc" ]]; then
-    log_warn "mc binary not found at ${SCRIPT_DIR}/mc (optional)"
+if [[ ! -f "/usr/local/bin/mc" ]]; then
+    log_warn "mc binary not found at /usr/local/bin/mc (optional)"
 fi
+
+log_info "Binaries verified:"
+log_info "  /usr/local/bin/minio"
+[[ -f "/usr/local/bin/mc" ]] && log_info "  /usr/local/bin/mc"
 
 #-------------------------------------------------------------------------------
 # Verify user and group exist
@@ -137,14 +142,10 @@ chmod 750 "${DATA_DIR}"
 chmod 750 "${LOG_DIR}"
 
 #-------------------------------------------------------------------------------
-# Make binaries executable
+# Binaries are pre-mounted to /usr/local/bin/ (read-only)
+# No need to chmod — they should be executable from host
 #-------------------------------------------------------------------------------
-log_info "Setting binary permissions..."
-
-chmod +x "${SCRIPT_DIR}/minio"
-if [[ -f "${SCRIPT_DIR}/mc" ]]; then
-    chmod +x "${SCRIPT_DIR}/mc"
-fi
+log_info "Binaries at /usr/local/bin/ (pre-mounted)"
 
 #-------------------------------------------------------------------------------
 # Create config file if not exists
@@ -184,6 +185,57 @@ log_info "Config     : ${CONFIG_FILE}"
 log_info "Data dir   : ${DATA_DIR}"
 log_info "Log dir    : ${LOG_DIR}"
 log_info ""
+log_info "Scripts and systemd service should be pre-mounted:"
+log_info "  /usr/local/bin/v2_start_minio.sh"
+log_info "  /usr/local/bin/v2_stop_minio.sh"
+log_info "  /etc/systemd/system/minio.service"
+log_info ""
+log_info "Reloading systemd..."
+systemctl daemon-reload 2>/dev/null || true
+
+#-------------------------------------------------------------------------------
+# Start MinIO temporarily to create default bucket
+#-------------------------------------------------------------------------------
+BUCKET_NAME="${MINIO_BUCKET_NAME:-opencti-bucket}"
+
+if [[ -f "/usr/local/bin/mc" ]]; then
+    log_info "Starting MinIO temporarily to create bucket '${BUCKET_NAME}'..."
+
+    # Start minio in background
+    su -s /bin/bash "${MINIO_USER}" -c "
+        MINIO_ROOT_USER='${MINIO_ROOT_USER}' \
+        MINIO_ROOT_PASSWORD='${MINIO_ROOT_PASSWORD}' \
+        /usr/local/bin/minio server ${MINIO_OPTS} ${MINIO_VOLUMES} &
+    "
+    MINIO_TMP_PID=$!
+
+    # Wait for MinIO to be ready
+    for i in $(seq 1 30); do
+        if curl -s -o /dev/null http://127.0.0.1:9000/minio/health/live 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    # Create alias + bucket
+    /usr/local/bin/mc alias set local http://127.0.0.1:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}" --api S3v4 2>/dev/null
+    if /usr/local/bin/mc mb --ignore-existing local/"${BUCKET_NAME}" 2>/dev/null; then
+        log_info "Bucket '${BUCKET_NAME}' created successfully"
+    else
+        log_warn "Failed to create bucket '${BUCKET_NAME}' — create manually after start"
+    fi
+
+    # Stop temporary MinIO
+    kill "$MINIO_TMP_PID" 2>/dev/null || pkill -f "minio server" 2>/dev/null || true
+    wait "$MINIO_TMP_PID" 2>/dev/null || true
+    sleep 1
+else
+    log_warn "mc not found — cannot auto-create bucket '${BUCKET_NAME}'"
+    log_warn "After starting MinIO, run:"
+    log_warn "  mc alias set local http://127.0.0.1:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}"
+    log_warn "  mc mb local/${BUCKET_NAME}"
+fi
+
+log_info ""
 log_info "Next steps:"
-log_info "  1. systemctl daemon-reload"
-log_info "  2. systemctl enable --now minio"
+log_info "  systemctl enable --now minio"
