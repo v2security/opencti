@@ -52,7 +52,7 @@ log_step()  { echo -e "${BLUE}[STEP]${NC} $1"; }
 # Configuration
 #-------------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MARKER_FILE="${SCRIPT_DIR}/.nodejs-installed"
+MARKER_FILE="/var/lib/.v2_nodejs_installed"
 
 TARBALL="nodejs22.tar.gz"
 INSTALL_DIR="/opt/nodejs"

@@ -51,7 +51,7 @@ log_step()  { echo -e "${BLUE}[STEP]${NC} $1"; }
 # Configuration
 #-------------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MARKER_FILE="${SCRIPT_DIR}/.python-installed"
+MARKER_FILE="/var/lib/.v2_python_installed"
 
 TARBALL="python312.tar.gz"
 INSTALL_DIR="/opt/python312"
