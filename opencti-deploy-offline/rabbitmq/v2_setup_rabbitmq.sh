@@ -166,7 +166,7 @@ log_info "Setting permissions..."
 chown -R "${RABBITMQ_USER}:${RABBITMQ_GROUP}" "${INSTALL_DIR}"
 chown -R "${RABBITMQ_USER}:${RABBITMQ_GROUP}" "${DATA_DIR}"
 chown -R "${RABBITMQ_USER}:${RABBITMQ_GROUP}" "${LOG_DIR}"
-chown -R "${RABBITMQ_USER}:${RABBITMQ_GROUP}" "${CONFIG_DIR}"
+chown -R "${RABBITMQ_USER}:${RABBITMQ_GROUP}" "${CONFIG_DIR}" 2>/dev/null || log_warn "Some config files are read-only (bind mount?), skipping chown"
 
 chmod 755 "${INSTALL_DIR}"
 chmod 750 "${DATA_DIR}"
@@ -274,8 +274,12 @@ fi
 #-------------------------------------------------------------------------------
 log_info "Enabling management plugin..."
 ENABLED_PLUGINS_FILE="${CONFIG_DIR}/enabled_plugins"
-echo "[rabbitmq_management]." > "${ENABLED_PLUGINS_FILE}"
-chown "${RABBITMQ_USER}:${RABBITMQ_GROUP}" "${ENABLED_PLUGINS_FILE}"
+if [[ -w "${ENABLED_PLUGINS_FILE}" ]] || [[ ! -f "${ENABLED_PLUGINS_FILE}" ]]; then
+    echo "[rabbitmq_management]." > "${ENABLED_PLUGINS_FILE}"
+    chown "${RABBITMQ_USER}:${RABBITMQ_GROUP}" "${ENABLED_PLUGINS_FILE}" 2>/dev/null || true
+else
+    log_warn "enabled_plugins is read-only (bind mount?), skipping write"
+fi
 
 #-------------------------------------------------------------------------------
 # Create marker file

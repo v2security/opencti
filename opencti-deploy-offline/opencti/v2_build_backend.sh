@@ -1,23 +1,27 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────
-# 03-build-backend.sh — Build OpenCTI backend (yarn install + build:prod)
+# v2_build_backend.sh — Build OpenCTI backend (yarn install + build:prod)
 #
-# Extracts Python 3.12 + Node.js 22 from step 01/02, puts them
-# in PATH, then builds the backend. node-calls-python native
-# addon compiles against Python 3.12 automatically because
-# Python 3.12 is FIRST in PATH.
+# Chạy TRÊN HOST (máy build). Extracts Python 3.12 + Node.js 22
+# từ runtime/, đưa vào PATH, rồi build backend.
+# node-calls-python native addon compiles against Python 3.12
+# automatically vì Python 3.12 FIRST in PATH.
 #
-# Requires:  files/python312.tar.gz  (from 01-build-python.sh)
-#            files/nodejs22.tar.gz   (from 02-build-nodejs.sh)
+# Requires:  runtime/python312.tar.gz  (from v2-build-python.sh)
+#            runtime/nodejs22.tar.gz   (from v2-build-nodejs.sh)
 #            gcc-c++, make on build machine
 # Produces:  opencti-graphql/build/back.js + node_modules/
+#
+# Usage:
+#   cd opencti-deploy-offline/opencti
+#   ./v2_build_backend.sh
 # ─────────────────────────────────────────────────────────────
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$BASE_DIR/.." && pwd)"
-FILES_DIR="$BASE_DIR/files"
+RUNTIME_DIR="$BASE_DIR/runtime"
 GRAPHQL_DIR="$REPO_ROOT/opencti-platform/opencti-graphql"
 
 log() { echo "  $1 $2"; }
@@ -30,13 +34,17 @@ fi
 
 echo "▸ Building OpenCTI backend"
 
+# ── Pre-checks ───────────────────────────────────────────────
+[[ -f "$RUNTIME_DIR/python312.tar.gz" ]] || { log "✗" "Missing: runtime/python312.tar.gz"; exit 1; }
+[[ -f "$RUNTIME_DIR/nodejs22.tar.gz" ]]  || { log "✗" "Missing: runtime/nodejs22.tar.gz"; exit 1; }
+
 # ── Extract runtimes to temp ──────────────────────────────────
 TMP="/tmp/build-env"
 rm -rf "$TMP" && mkdir -p "$TMP"
 
 log "→" "Extracting Python 3.12 + Node.js 22..."
-tar -xzf "$FILES_DIR/python312.tar.gz" -C "$TMP/"
-tar -xzf "$FILES_DIR/nodejs22.tar.gz"  -C "$TMP/"
+tar -xzf "$RUNTIME_DIR/python312.tar.gz" -C "$TMP/"
+tar -xzf "$RUNTIME_DIR/nodejs22.tar.gz"  -C "$TMP/"
 
 # Python 3.12 FIRST in PATH → node-calls-python compiles against 3.12
 export PATH="$TMP/python312/bin:$TMP/nodejs/bin:$PATH"

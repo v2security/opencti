@@ -5,8 +5,8 @@ output/
 cert/
 
 # Start scripts (contains secrets — NEVER commit)
-config/start.sh
-config/start-worker.sh
+opencti/v2_start_opencti.sh
+opencti-worker/v2_start_opencti_worker.sh
 
 # Offline deploy archives
 opencti-offline-deploy.tar.gz
@@ -19,3 +19,27 @@ files/python-deps.tar.gz
 files/node-v*-linux-x64.tar.xz
 files/python312.tar.gz
 files/nodejs22.tar.gz
+
+# OpenCTI platform — populated by v2_prepare_opencti.sh (large, from repo source)
+opencti/build/
+opencti/node_modules/
+opencti/src/
+opencti/config/
+opencti/static/
+opencti/script/
+opencti/public/
+opencti/client-python/
+opencti/.pip-packages/
+opencti/.python-venv/
+opencti/package.json
+opencti/.yarnrc.yml
+opencti/logs/
+opencti/.support/
+opencti/telemetry/
+
+
+# OpenCTI worker — populated by v2_prepare_opencti_worker.sh
+opencti-worker/src/
+opencti-worker/.pip-packages/
+opencti-worker/.python-venv/
+

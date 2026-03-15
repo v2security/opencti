@@ -1,140 +1,330 @@
-# OpenCTI Offline Deployment
+# OpenCTI Offline Deployment — Rocky Linux 9
 
-Deploy OpenCTI trên Rocky Linux 9 **không cần internet** trên máy target.
+Deploy OpenCTI 6.9.22 trên Rocky Linux 9 **không cần internet** trên máy target.
 
-## Tổng quan: 2 Phần
+---
 
-```sh
-MÁY BUILD:  bash scripts/pack_app.sh
-  01 → Build Python 3.12 (Docker)
-  02 → Download Node.js 22 (binary)
-  03 → Build backend (yarn build:prod)
-  04 → Build frontend (yarn build:standalone)
-  05 → Copy source + build artifacts → tar.gz
-  06 → Download Python packages → tar.gz
-  07 → Assemble ALL → opencti-app-package.tar.gz
+## PHẦN 1: MÁY BUILD (có internet)
 
-MÁY TARGET: 
-  bash scripts/setup_infra.sh   → Redis + MinIO + RabbitMQ
-  bash scripts/setup_app.sh     → Extract + install + start systemd
+### Bước 1: Chuẩn bị binaries (chạy 1 lần duy nhất)
+
+```bash
+# Build Python 3.12 runtime → runtime/python312.tar.gz
+cd runtime && bash v2-build-python.sh
+
+# Package Node.js 22 → runtime/nodejs22.tar.gz
+cd runtime && bash v2-build-nodejs.sh
+
+# Đảm bảo có sẵn:
+#   rpms/*.rpm (~126 files)
+#   minio/minio, minio/mc
+#   rabbitmq/rabbitmq-server-generic-unix-*.tar.xz
 ```
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    MÁY BUILD (có internet)                      │
-│                                                                 │
-│  Part 1: Infra        │  Part 2: App                            │
-│  (đã có sẵn)          │  bash scripts/pack_app.sh               │
-│  • minio binary       │    01 → Build Python 3.12 (Docker)      │
-│  • redis RPM          │    02 → Download Node.js 22 (binary)    │
-│  • rabbitmq tarball   │    03 → Build backend (yarn build:prod) │
-│  • erlang RPMs        │    04 → Build frontend (React + Relay)  │
-│  • system RPMs        │    05 → Copy source + build artifacts   │
-│                       │    06 → Download Python packages        │
-│                       │    07 → Pack ALL → 1 file .tar.gz       │
-│                       │                                         │
-│  Copy toàn bộ thư mục opencti-deploy-offline/ → máy target      │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   MÁY TARGET (offline)                          │
-│                                                                 │
-│  bash scripts/setup_infra.sh     ← Part 1: Redis+MinIO+RabbitMQ │
-│  bash scripts/setup_app.sh       ← Part 2: Python+Node+OpenCTI  │
-│                                                                 │
-#  Done! → http://localhost:8080                                  #
-└─────────────────────────────────────────────────────────────────┘
+### Bước 2: Build + Prepare
+
+```bash
+cd opencti-deploy-offline
+
+# 2.1 Build backend (yarn install + build:prod)
+cd opencti && ./v2_build_backend.sh
+
+# 2.2 Build frontend (React + Relay)
+cd opencti && ./v2_build_frontend.sh
+
+# 2.3 Prepare platform (copy source + download pip packages)
+cd opencti && ./v2_prepare_opencti.sh
+
+# 2.4 Prepare worker (copy source + download pip packages)
+cd opencti-worker && ./v2_prepare_opencti_worker.sh
 ```
 
-## Part 1: Infrastructure (Infra)
+### Bước 3: Clean (nếu cần build lại)
 
-Cài đặt **Redis (RPM) + MinIO (binary) + RabbitMQ (tarball)** đã chuẩn bị sẵn.
+```bash
+cd opencti-deploy-offline
 
-**Files cần có:**
-```
-files/
-├── minio                                  ← MinIO binary
-├── mc                                     ← MinIO client (optional)
-└── rabbitmq-server-generic-unix-4.2.0.tar.xz ← RabbitMQ
+# Hỏi từng component muốn xóa
+./v2_clean_build.sh
 
-rpm/
-├── erlang-*.rpm                           ← Erlang (for RabbitMQ)
-├── redis-*.rpm                            ← Redis (RPM, cài qua dnf)
-└── *.rpm                                  ← System dependencies
-
-config/
-├── redis.conf
-├── minio.conf
-├── rabbitmq.conf
-├── rabbitmq-env.conf
-└── enabled_plugins
+# Hoặc xóa tất cả
+./v2_clean_build.sh --all
 ```
 
+### Bước 4: Pack
 
-## Part 2: Application (App)
+```bash
+cd opencti-deploy-offline
+./v2_pack_cti.sh
+# → opencti-offline-deploy.tar.gz (~800MB-1.2GB)
+```
 
-Cài đặt **Python 3.12 + Node.js 22 + OpenCTI Platform + Worker**.
+### Bước 5: Copy sang máy target
+
+```bash
+scp opencti-offline-deploy.tar.gz root@163.223.58.17:/opt/
+```
+
+---
+
+## PHẦN 2: MÁY TARGET (Rocky Linux 9, offline)
+
+### Yêu cầu
+
+- Rocky Linux 9.x
+- Elasticsearch 8.x đã cài + chạy (port 8686)
+- RAM ≥ 8GB, Disk ≥ 50GB
+- `sysctl -w vm.max_map_count=262144`
+
+### Bước 1: Giải nén + đặt files vào đúng chỗ
+
+```bash
+cd /opt
+tar xzf opencti-offline-deploy.tar.gz
+bash v2_unpack_cti.sh
+```
+
+Script chỉ **copy files** — không chạy setup, không start gì cả.
+Kết quả sau khi chạy xong:
+
+| Nguồn | Đích |
+|-------|------|
+| `minio/minio`, `minio/mc` | `/usr/local/bin/` |
+| `minio/v2_*.sh` | `/usr/local/bin/` |
+| `rabbitmq/v2_start/stop/uninstall_rabbitmq.sh` | `/usr/local/bin/` |
+| `runtime/v2_uninstall_*.sh` | `/usr/local/bin/` |
+| `config/redis.conf` | `/etc/redis/redis.conf` |
+| `config/minio.conf` | `/etc/minio/minio.conf` |
+| `config/rabbitmq*.conf`, `enabled_plugins` | `/etc/rabbitmq/` |
+| `config/logrotate.conf` | `/etc/logrotate.d/opencti` |
+| `systemd/*.service` | `/etc/systemd/system/` |
+| `opencti/` | `/etc/saids/opencti/` |
+| `opencti/v2_start/stop/uninstall_opencti.sh` | `/usr/local/bin/` |
+| `opencti-worker/` | `/etc/saids/opencti-worker/` |
+| `opencti-worker/v2_start/stop/uninstall_opencti_worker.sh` | `/usr/local/bin/` |
+
+### Bước 2: Cài RPMs
+
+```bash
+cd /opt/rpms
+bash v2_install_rpms.sh
+```
+
+### Bước 3: Cài Python 3.12 + Node.js 22
+
+```bash
+cd /opt/runtime
+bash v2_install_python.sh     # → /opt/python312/
+bash v2_install_nodejs.sh      # → /opt/nodejs/
+```
+
+### Bước 4: Setup MinIO
+
+```bash
+v2_setup_minio.sh
+```
+
+### Bước 5: Setup RabbitMQ
+
+```bash
+cd /opt/rabbitmq
+bash v2_setup_rabbitmq.sh
+```
+
+### Bước 6: Start infrastructure
+
+```bash
+systemctl enable --now redis minio rabbitmq
+systemctl status redis minio rabbitmq
+```
+
+### Bước 7: Setup OpenCTI Platform (Python venv)
+
+```bash
+/etc/saids/opencti/v2_setup_opencti.sh
+```
+
+### Bước 8: Setup OpenCTI Worker (Python venv)
+
+```bash
+/etc/saids/opencti-worker/v2_setup_opencti_worker.sh
+```
+
+### Bước 9: Sửa credentials ⚠️
+
+```bash
+vi /usr/local/bin/v2_start_opencti.sh
+```
+
+| Biến | Mô tả | Default |
+|------|--------|---------|
+| `ELASTICSEARCH__URL` | ES endpoint | `http://localhost:8686` |
+| `APP__ADMIN__EMAIL` | Admin email | `admin@v2secure.vn` |
+| `APP__ADMIN__PASSWORD` | Admin password | *(sửa lại)* |
+| `APP__ADMIN__TOKEN` | API token | *(sửa lại)* |
+| `REDIS__PASSWORD` | Redis password | *(sửa lại)* |
+| `MINIO__ACCESS_KEY` / `MINIO__SECRET_KEY` | MinIO credentials | *(sửa lại)* |
+| `RABBITMQ__USERNAME` / `RABBITMQ__PASSWORD` | RabbitMQ credentials | *(sửa lại)* |
+| `AI__TOKEN` | Anthropic API key | *(optional)* |
+
+```bash
+vi /usr/local/bin/v2_start_opencti_worker.sh
+```
+
+| Biến | Mô tả |
+|------|--------|
+| `OPENCTI_URL` | Phải = `APP__BASE_URL` |
+| `OPENCTI_TOKEN` | Phải = `APP__ADMIN__TOKEN` |
+
+### Bước 10: Start OpenCTI
+
+```bash
+# Platform
+systemctl enable opencti-platform
+systemctl start opencti-platform
+# Đợi ~60s cho platform khởi tạo xong...
+
+# Workers
+systemctl enable opencti-worker@{1..3}
+systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
+```
+
+### Bước 11: Kiểm tra
+
+```bash
+systemctl status opencti-platform
+systemctl status opencti-worker@1 opencti-worker@2 opencti-worker@3
+
+curl -i http://localhost:8080/
+# → 200
+```
+
+---
+
+## Quản lý services
+
+### Stop
+
+```bash
+# Từng cái
+systemctl stop opencti-worker@1 opencti-worker@2 opencti-worker@3
+systemctl stop opencti-platform
+systemctl stop rabbitmq minio redis
+
+# Xem status
+systemctl status opencti-platform opencti-worker@{1..3}
+```
+
+### Start lại
+
+```bash
+systemctl start redis minio rabbitmq
+systemctl start opencti-platform
+# Đợi ~60s...
+systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
+```
+
+### Gỡ bỏ toàn bộ
+
+```bash
+bash v2_uninstall_cti.sh
+
+# Hoặc giữ data
+KEEP_DATA=true bash v2_uninstall_cti.sh
+```
+
+### Xem logs
+
+```bash
+journalctl -u opencti-platform -f
+tail -f /var/log/opencti/opencti-platform.log
+tail -f /var/log/opencti-worker/opencti-worker-1.log
+```
+
+### Reset setup (chạy lại)
+
+```bash
+rm /var/lib/.v2_setup_opencti_done         # Platform
+rm /var/lib/.v2_setup_opencti_worker_done  # Worker
+```
+
+---
 
 ## Cấu trúc thư mục
 
+### Trên máy build
+
 ```
 opencti-deploy-offline/
-├── scripts/
-│   ├── pack_app.sh                  ★ Pack all → files/opencti-app-package.tar.gz
-│   ├── 01-build-python.sh       ← Build Python 3.12 in Docker
-│   ├── 02-build-nodejs.sh       ← Download Node.js 22 pre-built binary
-│   ├── 03-build-backend.sh      ← Build backend (yarn install + build:prod)
-│   ├── 04-build-frontend.sh     ← Build frontend (React + Relay → public/)
-│   ├── 05-copy-source.sh        ← Copy OpenCTI source + build artifacts
-│   ├── 06-download-deps.sh      ← Download Python packages
-│   ├── setup_infra.sh           ★ Deploy Part 1 (trên máy target)
-│   ├── setup_app.sh             ★ Deploy Part 2 (trên máy target)
-│   ├── run_minio.sh             ← Systemd run script (MinIO)
-│   ├── run_rabbitmq.sh          ← Systemd run script (RabbitMQ)
-│   └── enable-services.sh       ← Start all services + health checks
-├── config/
-│   ├── start.sh                 ← Platform env vars (⚠ chứa secrets)
-│   ├── start-worker.sh          ← Worker env vars (⚠ chứa secrets)
-│   ├── redis.conf
-│   ├── minio.conf
-│   ├── rabbitmq.conf
-│   ├── rabbitmq-env.conf
-│   └── enabled_plugins
-├── systemd/
-│   ├── minio.service
-│   ├── rabbitmq-server.service
-│   ├── opencti-platform.service
-│   └── opencti-worker@.service  (redis.service do RPM cung cấp)
-├── files/
-│   ├── opencti-app-package.tar.gz  ★ Output Part 2 (tất cả trong 1 file)
-│   ├── minio                       ← MinIO binary
-│   ├── mc                          ← MinIO client
-│   ├── rabbitmq-server-*.tar.xz    ← RabbitMQ
-│   ├── Python-3.12.8.tgz           ← Python source (dùng khi build)
-│   ├── python312.tar.gz            ← Python runtime (01-build-python.sh)
-│   ├── nodejs22.tar.gz             ← Node.js pre-built binary (02-build-nodejs.sh)
-│   ├── opencti-source.tar.gz       ← OpenCTI source (05-copy-source.sh)
-│   └── python-deps.tar.gz          ← Python packages (06-download-deps.sh)
-├── rpm/
-│   ├── erlang-*.rpm
-│   └── *.rpm                       ← System dependencies
-├── Dockerfile                       ← Test container
-├── docker-compose.yml               ← Test stack
-└── Makefile                         ← Test automation
+├── v2_clean_build.sh             ★ Xóa artifacts để build lại (máy build)
+├── v2_pack_cti.sh                ★ Đóng gói → archive
+├── v2_unpack_cti.sh              ★ Đặt files vào đúng chỗ (máy target)
+├── v2_uninstall_cti.sh           ★ Gỡ bỏ toàn bộ
+│
+├── rpms/
+│   ├── v2_install_rpms.sh
+│   └── *.rpm                     ~126 packages
+│
+├── runtime/
+│   ├── v2_install_python.sh      → /opt/python312/
+│   ├── v2_install_nodejs.sh      → /opt/nodejs/
+│   ├── v2_uninstall_python.sh
+│   ├── v2_uninstall_nodejs.sh
+│   ├── python312.tar.gz
+│   └── nodejs22.tar.gz
+│
+├── minio/
+│   ├── minio, mc                 Binaries
+│   ├── v2_setup_minio.sh         First-boot setup
+│   ├── v2_start_minio.sh         Systemd gọi
+│   ├── v2_stop_minio.sh
+│   └── v2_uninstall_minio.sh
+│
+├── rabbitmq/
+│   ├── rabbitmq-server-*.tar.xz
+│   ├── v2_setup_rabbitmq.sh      First-boot setup
+│   ├── v2_start_rabbitmq.sh      Systemd gọi
+│   ├── v2_stop_rabbitmq.sh
+│   └── v2_uninstall_rabbitmq.sh
+│
+├── config/                       Tất cả config files
+├── systemd/                      4 service units
+│
+├── opencti/                      Platform (máy build)
+│   ├── v2_build_backend.sh       Build: yarn build:prod
+│   ├── v2_build_frontend.sh      Build: React + Relay
+│   ├── v2_prepare_opencti.sh     Prepare: copy source + pip
+│   ├── v2_setup_opencti.sh       Setup: create venv (máy target)
+│   ├── v2_start_opencti.sh       Start: env vars + npm (⚠️ secrets)
+│   ├── v2_stop_opencti.sh
+│   └── v2_uninstall_opencti.sh
+│
+└── opencti-worker/               Worker (máy build)
+    ├── v2_prepare_opencti_worker.sh
+    ├── v2_setup_opencti_worker.sh
+    ├── v2_start_opencti_worker.sh (⚠️ secrets)
+    ├── v2_stop_opencti_worker.sh
+    └── v2_uninstall_opencti_worker.sh
 ```
 
-## Kết quả sau khi deploy trên target
+### Trên máy target (sau unpack + setup)
 
 ```
-/opt/python312/                        ← Python 3.12 runtime (compiled, --enable-shared)
-/opt/nodejs/                           ← Node.js 22 runtime (pre-built binary)
-/usr/local/bin/minio                   ← MinIO binary
-/usr/bin/redis-server                  ← Redis (from RPM)
-/opt/rabbitmq/sbin/                    ← RabbitMQ binaries
+/opt/python312/                → Python 3.12
+/opt/nodejs/                   → Node.js 22
+/opt/rabbitmq/                 → RabbitMQ server
+/usr/local/bin/minio           → MinIO binary
+/usr/local/bin/v2_*.sh         → Tất cả scripts
+/usr/bin/redis-server          → Redis (RPM)
 
-/etc/saids/opencti/        ← OpenCTI Platform
-/etc/saids/opencti-worker/ ← OpenCTI Workers
+/etc/saids/opencti/            ★ Platform
+/etc/saids/opencti-worker/     ★ Workers
+
+/etc/redis/  /etc/minio/  /etc/rabbitmq/   → Configs
+/etc/systemd/system/                       → Service units
+
+/var/log/opencti/              → Platform logs
+/var/log/opencti-worker/       → Worker logs
 
 Ports:
   6379   Redis
@@ -143,131 +333,42 @@ Ports:
   9001   MinIO Console
   5672   RabbitMQ AMQP
   15672  RabbitMQ Management
-  8080   OpenCTI Platform (HTTP)
+  8080   OpenCTI Platform
 ```
 
-## Makefile commands
+---
+
+## Troubleshooting
+
+| Vấn đề | Giải pháp |
+|--------|-----------|
+| Platform SEGV (signal 11) | EQL patch đã tự động áp dụng. Kiểm tra `check_indicator.py` |
+| Không connect ES | Sửa `ELASTICSEARCH__URL` trong `/usr/local/bin/v2_start_opencti.sh` |
+| Worker không connect platform | Kiểm tra `OPENCTI_URL` + `OPENCTI_TOKEN` |
+| Setup chạy lại | `rm /var/lib/.v2_setup_*_done` |
+
+---
+
+## Docker Test
 
 ```bash
-#   make pack            # Pack OpenCTI source + deps
-#   make test            # Full: pack + build + deploy infra + app + status
-#   make test-infra      # Infra only: build + deploy infra + status
-#   make status          # Service status
-#   make exec            # Shell vào container
-#   make destroy         # Xóa tất cả containers
-#   make destroy-pack    # Xóa build artifacts
-```
+# Prepare trên host
+cd opencti && ./v2_build_backend.sh && ./v2_build_frontend.sh && ./v2_prepare_opencti.sh
+cd opencti-worker && ./v2_prepare_opencti_worker.sh
 
-## RPM Dependencies
-```bash
-[master@rocky8 rpm]$ tree .
+# Start test
+make start && make exec
 
-├── acl-2.3.1-4.el9.x86_64.rpm
-├── alternatives-1.24-2.el9.x86_64.rpm
-├── audit-libs-3.1.5-7.el9.x86_64.rpm
-├── basesystem-11-13.el9.0.1.noarch.rpm
-├── bash-5.1.8-9.el9.x86_64.rpm
-├── binutils-2.35.2-67.el9_7.1.x86_64.rpm
-├── bzip2-libs-1.0.8-10.el9_5.x86_64.rpm
-├── ca-certificates-2025.2.80_v9.0.305-91.el9.noarch.rpm
-├── coreutils-8.32-39.el9.x86_64.rpm
-├── coreutils-common-8.32-39.el9.x86_64.rpm
-├── cpp-11.5.0-11.el9.x86_64.rpm
-├── cracklib-2.9.6-27.el9.x86_64.rpm
-├── cracklib-dicts-2.9.6-27.el9.x86_64.rpm
-├── crypto-policies-20250905-1.git377cc42.el9.noarch.rpm
-├── curl-7.76.1-35.el9_7.3.x86_64.rpm
-├── dbus-1.12.20-8.el9.x86_64.rpm
-├── dbus-broker-28-7.el9.x86_64.rpm
-├── dbus-common-1.12.20-8.el9.noarch.rpm
-├── erlang-27.2.4-1.el9.x86_64.rpm
-├── expat-2.5.0-5.el9_7.1.x86_64.rpm
-├── filesystem-3.16-5.el9.x86_64.rpm
-├── findutils-4.8.0-7.el9.x86_64.rpm
-├── gawk-5.1.0-6.el9.x86_64.rpm
-├── gawk-all-langpacks-5.1.0-6.el9.x86_64.rpm
-├── gcc-11.5.0-11.el9.x86_64.rpm
-├── gcc-c++-11.5.0-11.el9.x86_64.rpm
-├── glibc-2.34-231.el9_7.10.x86_64.rpm
-├── glibc-common-2.34-231.el9_7.10.x86_64.rpm
-├── glibc-devel-2.34-231.el9_7.10.x86_64.rpm
-├── glibc-gconv-extra-2.34-231.el9_7.10.x86_64.rpm
-├── glibc-headers-2.34-231.el9_7.10.x86_64.rpm
-├── glibc-langpack-en-2.34-231.el9_7.10.x86_64.rpm
-├── glibc-minimal-langpack-2.34-231.el9_7.10.x86_64.rpm
-├── gmp-6.2.0-13.el9.x86_64.rpm
-├── grep-3.6-5.el9.x86_64.rpm
-├── gzip-1.12-1.el9.x86_64.rpm
-├── hostname-3.23-6.el9.x86_64.rpm
-├── iproute-6.14.0-2.el9.x86_64.rpm
-├── isl-0.16.1-15.el9.x86_64.rpm
-├── kernel-headers-5.14.0-611.36.1.el9_7.x86_64.rpm
-├── kmod-libs-28-11.el9.x86_64.rpm
-├── libacl-2.3.1-4.el9.x86_64.rpm
-├── libattr-2.5.1-3.el9.x86_64.rpm
-├── libblkid-2.37.4-21.el9.x86_64.rpm
-├── libcap-2.48-10.el9.x86_64.rpm
-├── libcap-ng-0.8.2-7.el9.x86_64.rpm
-├── libdb-5.3.28-57.el9_6.x86_64.rpm
-├── libeconf-0.4.1-4.el9.x86_64.rpm
-├── libfdisk-2.37.4-21.el9.x86_64.rpm
-├── libffi-3.4.2-8.el9.x86_64.rpm
-├── libgcc-11.5.0-11.el9.x86_64.rpm
-├── libgcrypt-1.10.0-11.el9.x86_64.rpm
-├── libgpg-error-1.42-5.el9.x86_64.rpm
-├── libmount-2.37.4-21.el9.x86_64.rpm
-├── libmpc-1.2.1-4.el9.x86_64.rpm
-├── libnsl2-2.0.0-1.el9.0.1.x86_64.rpm
-├── libpwquality-1.4.4-8.el9.x86_64.rpm
-├── libseccomp-2.5.2-2.el9.x86_64.rpm
-├── libselinux-3.6-3.el9.x86_64.rpm
-├── libsemanage-3.6-5.el9_6.x86_64.rpm
-├── libsepol-3.6-3.el9.x86_64.rpm
-├── libsigsegv-2.13-4.el9.x86_64.rpm
-├── libsmartcols-2.37.4-21.el9.x86_64.rpm
-├── libstdc++-devel-11.5.0-11.el9.x86_64.rpm
-├── libtasn1-4.16.0-9.el9.x86_64.rpm
-├── libtirpc-1.3.3-9.el9.x86_64.rpm
-├── libutempter-1.2.1-6.el9.x86_64.rpm
-├── libuuid-2.37.4-21.el9.x86_64.rpm
-├── libxcrypt-4.4.18-3.el9.x86_64.rpm
-├── libxcrypt-compat-4.4.18-3.el9.x86_64.rpm
-├── libxcrypt-devel-4.4.18-3.el9.x86_64.rpm
-├── libzstd-1.5.5-1.el9.x86_64.rpm
-├── lz4-libs-1.9.3-5.el9.x86_64.rpm
-├── make-4.3-8.el9.x86_64.rpm
-├── mpfr-4.1.0-7.el9.x86_64.rpm
-├── ncurses-base-6.2-12.20210508.el9.noarch.rpm
-├── ncurses-libs-6.2-12.20210508.el9.x86_64.rpm
-├── openssl-3.5.1-7.el9_7.x86_64.rpm
-├── openssl-fips-provider-3.5.1-7.el9_7.x86_64.rpm
-├── openssl-libs-3.5.1-7.el9_7.x86_64.rpm
-├── p11-kit-0.25.3-3.el9_5.x86_64.rpm
-├── p11-kit-trust-0.25.3-3.el9_5.x86_64.rpm
-├── pam-1.5.1-26.el9_6.x86_64.rpm
-├── pcre2-10.40-6.el9.x86_64.rpm
-├── pcre2-syntax-10.40-6.el9.noarch.rpm
-├── pcre-8.44-4.el9.x86_64.rpm
-├── popt-1.18-8.el9.x86_64.rpm
-├── procps-ng-3.3.17-14.el9.x86_64.rpm
-├── readline-8.1-4.el9.x86_64.rpm
-├── rocky-gpg-keys-9.7-1.4.el9.noarch.rpm
-├── rocky-release-9.7-1.4.el9.noarch.rpm
-├── rocky-repos-9.7-1.4.el9.noarch.rpm
-├── sed-4.8-9.el9.x86_64.rpm
-├── setup-2.13.7-10.el9.noarch.rpm
-├── shadow-utils-4.9-15.el9.x86_64.rpm
-├── systemd-252-55.el9_7.7.rocky.0.1.x86_64.rpm
-├── systemd-libs-252-55.el9_7.7.rocky.0.1.x86_64.rpm
-├── systemd-pam-252-55.el9_7.7.rocky.0.1.x86_64.rpm
-├── systemd-rpm-macros-252-55.el9_7.7.rocky.0.1.noarch.rpm
-├── tar-1.34-9.el9_7.x86_64.rpm
-├── tzdata-2025c-1.el9.noarch.rpm
-├── util-linux-2.37.4-21.el9.x86_64.rpm
-├── util-linux-core-2.37.4-21.el9.x86_64.rpm
-├── which-2.21-30.el9_6.x86_64.rpm
-├── xz-libs-5.2.5-8.el9_0.x86_64.rpm
-└── zlib-1.2.11-40.el9.x86_64.rpm
-
-0 directories, 106 files
+# Trong container — chạy từng bước
+cd /tmp/rpms && bash v2_install_rpms.sh
+cd /tmp/runtime && bash v2_install_python.sh && bash v2_install_nodejs.sh
+v2_setup_minio.sh
+cd /tmp/rabbitmq && bash v2_setup_rabbitmq.sh
+systemctl enable --now redis minio rabbitmq
+/etc/saids/opencti/v2_setup_opencti.sh
+/etc/saids/opencti-worker/v2_setup_opencti_worker.sh
+systemctl enable --now opencti-platform
+# Đợi 60s...
+systemctl enable opencti-worker@{1..3}
+systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
 ```

@@ -13,6 +13,14 @@
 #   Tarballs + setup scripts      → /tmp/<component>/
 #   Config (tập trung config/)    → /etc/<service>/
 #   Systemd units (systemd/)      → /etc/systemd/system/
+#   OpenCTI platform (opencti/)   → /etc/saids/opencti/
+#   OpenCTI worker (opencti-worker/) → /etc/saids/opencti-worker/
+#
+# Prepare (chạy trên HOST trước docker compose up):
+#   cd opencti && ./v2_build_backend.sh     # Build backend (back.js + node_modules)
+#   cd opencti && ./v2_build_frontend.sh    # Build frontend (index.html)
+#   cd opencti && ./v2_prepare_opencti.sh   # Copy source → deploy folder
+#   cd opencti-worker && ./v2_prepare_opencti_worker.sh  # Copy worker → deploy folder
 #
 # Test flow:
 #   docker compose up -d
@@ -28,10 +36,25 @@
 #   v2_setup_minio.sh
 #   cd /tmp/rabbitmq && ./v2_setup_rabbitmq.sh
 #
-#   # 4. Start services
+#   # 4. Start infra
 #   systemctl enable redis minio rabbitmq
 #   systemctl start redis minio rabbitmq
 #   systemctl status redis minio rabbitmq
+#
+#   # 5. Setup OpenCTI Platform (create Python venv)
+#   /etc/saids/opencti/v2_setup_opencti.sh
+#
+#   # 6. Setup OpenCTI Worker (create Python venv)
+#   /etc/saids/opencti-worker/v2_setup_opencti_worker.sh
+#
+#   # 7. Start OpenCTI
+#   systemctl enable opencti-platform
+#   systemctl start opencti-platform
+#   systemctl status opencti-platform
+#   # Wait ~60s for platform to initialize...
+#   systemctl enable opencti-worker@{1..3}
+#   systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
+#   systemctl status opencti-worker@1 opencti-worker@2 opencti-worker@3
 ###############################################################################
 
 services:
@@ -105,6 +128,28 @@ services:
       # ══════════════════════════════════════════════════════════
       - ./systemd/minio.service:/etc/systemd/system/minio.service:ro
       - ./systemd/rabbitmq.service:/etc/systemd/system/rabbitmq.service:ro
+      - ./systemd/opencti-platform.service:/etc/systemd/system/opencti-platform.service:ro
+      - ./systemd/opencti-worker@.service:/etc/systemd/system/opencti-worker@.service:ro
+
+      # ══════════════════════════════════════════════════════════
+      # OpenCTI Platform — source + build
+      # (populated by v2_prepare_opencti.sh trên host)
+      # ══════════════════════════════════════════════════════════
+      - ./opencti:/etc/saids/opencti
+
+      # ══════════════════════════════════════════════════════════
+      # OpenCTI Worker — source
+      # (populated by v2_prepare_opencti_worker.sh trên host)
+      # ══════════════════════════════════════════════════════════
+      - ./opencti-worker:/etc/saids/opencti-worker
+
+      # ══════════════════════════════════════════════════════════
+      # Start/Stop scripts → /usr/local/bin/
+      # ══════════════════════════════════════════════════════════
+      - ./opencti/v2_start_opencti.sh:/usr/local/bin/v2_start_opencti.sh:ro
+      - ./opencti/v2_stop_opencti.sh:/usr/local/bin/v2_stop_opencti.sh:ro
+      - ./opencti-worker/v2_start_opencti_worker.sh:/usr/local/bin/v2_start_opencti_worker.sh:ro
+      - ./opencti-worker/v2_stop_opencti_worker.sh:/usr/local/bin/v2_stop_opencti_worker.sh:ro
 
     ports:
       - "16379:6379"      # Redis
@@ -112,6 +157,7 @@ services:
       - "19001:9001"      # MinIO Console
       - "15672:5672"      # RabbitMQ AMQP
       - "25672:15672"     # RabbitMQ Management
+      - "18080:8080"      # OpenCTI Platform
     environment:
       - container=docker
     mem_limit: 8g
