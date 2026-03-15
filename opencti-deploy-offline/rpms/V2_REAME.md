@@ -1,4 +1,4 @@
-(base) [master@rocky8 rpms]$ ls | grep .rpm
+(base) [master@rocky8 rpms]$ ls | grep rpm
 acl-2.3.1-4.el9.x86_64.rpm
 alternatives-1.24-2.el9.x86_64.rpm
 audit-libs-3.1.5-7.el9.x86_64.rpm
@@ -17,6 +17,9 @@ curl-7.76.1-35.el9_7.3.x86_64.rpm
 dbus-1.12.20-8.el9.x86_64.rpm
 dbus-broker-28-7.el9.x86_64.rpm
 dbus-common-1.12.20-8.el9.noarch.rpm
+elfutils-debuginfod-client-0.193-1.el9.rocky.0.1.x86_64.rpm
+elfutils-libelf-0.193-1.el9.rocky.0.1.x86_64.rpm
+elfutils-libs-0.193-1.el9.rocky.0.1.x86_64.rpm
 erlang-27.2.4-1.el9.x86_64.rpm
 expat-2.5.0-5.el9_7.1.x86_64.rpm
 filesystem-3.16-5.el9.x86_64.rpm
@@ -43,18 +46,25 @@ kmod-libs-28-11.el9.x86_64.rpm
 libacl-2.3.1-4.el9.x86_64.rpm
 libattr-2.5.1-3.el9.x86_64.rpm
 libblkid-2.37.4-21.el9.x86_64.rpm
+libbpf-1.5.0-2.el9.x86_64.rpm
+libbrotli-1.0.9-9.el9_7.x86_64.rpm
 libcap-2.48-10.el9.x86_64.rpm
 libcap-ng-0.8.2-7.el9.x86_64.rpm
+libcurl-7.76.1-35.el9_7.3.x86_64.rpm
 libdb-5.3.28-57.el9_6.x86_64.rpm
 libeconf-0.4.1-4.el9.x86_64.rpm
 libfdisk-2.37.4-21.el9.x86_64.rpm
 libffi-3.4.2-8.el9.x86_64.rpm
 libgcc-11.5.0-11.el9.x86_64.rpm
 libgcrypt-1.10.0-11.el9.x86_64.rpm
+libgomp-11.5.0-11.el9.x86_64.rpm
 libgpg-error-1.42-5.el9.x86_64.rpm
+libmnl-1.0.4-16.el9_4.x86_64.rpm
 libmount-2.37.4-21.el9.x86_64.rpm
 libmpc-1.2.1-4.el9.x86_64.rpm
 libnsl2-2.0.0-1.el9.0.1.x86_64.rpm
+libpkgconf-1.7.3-10.el9.x86_64.rpm
+libpsl-0.21.1-5.el9.x86_64.rpm
 libpwquality-1.4.4-8.el9.x86_64.rpm
 libseccomp-2.5.2-2.el9.x86_64.rpm
 libselinux-3.6-3.el9.x86_64.rpm
@@ -62,6 +72,9 @@ libsemanage-3.6-5.el9_6.x86_64.rpm
 libsepol-3.6-3.el9.x86_64.rpm
 libsigsegv-2.13-4.el9.x86_64.rpm
 libsmartcols-2.37.4-21.el9.x86_64.rpm
+libssh-0.10.4-17.el9_7.x86_64.rpm
+libssh-config-0.10.4-17.el9_7.noarch.rpm
+libstdc++-11.5.0-11.el9.x86_64.rpm
 libstdc++-devel-11.5.0-11.el9.x86_64.rpm
 libtasn1-4.16.0-9.el9.x86_64.rpm
 libtirpc-1.3.3-9.el9.x86_64.rpm
@@ -71,6 +84,7 @@ libxcrypt-4.4.18-3.el9.x86_64.rpm
 libxcrypt-compat-4.4.18-3.el9.x86_64.rpm
 libxcrypt-devel-4.4.18-3.el9.x86_64.rpm
 libzstd-1.5.5-1.el9.x86_64.rpm
+logrotate-3.18.0-12.el9.x86_64.rpm
 lz4-libs-1.9.3-5.el9.x86_64.rpm
 make-4.3-8.el9.x86_64.rpm
 mpfr-4.1.0-7.el9.x86_64.rpm
@@ -85,8 +99,13 @@ pam-1.5.1-26.el9_6.x86_64.rpm
 pcre2-10.40-6.el9.x86_64.rpm
 pcre2-syntax-10.40-6.el9.noarch.rpm
 pcre-8.44-4.el9.x86_64.rpm
+pkgconf-1.7.3-10.el9.x86_64.rpm
+pkgconf-m4-1.7.3-10.el9.noarch.rpm
+pkgconf-pkg-config-1.7.3-10.el9.x86_64.rpm
 popt-1.18-8.el9.x86_64.rpm
 procps-ng-3.3.17-14.el9.x86_64.rpm
+psmisc-23.4-3.el9.x86_64.rpm
+publicsuffix-list-dafsa-20210518-3.el9.noarch.rpm
 readline-8.1-4.el9.x86_64.rpm
 redis-6.2.20-3.el9_7.x86_64.rpm
 rocky-gpg-keys-9.7-1.4.el9.noarch.rpm

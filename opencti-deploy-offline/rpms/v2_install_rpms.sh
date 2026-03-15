@@ -64,7 +64,7 @@ log_step()  { echo -e "${BLUE}[STEP]${NC} $1"; }
 # Configuration
 #-------------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MARKER_FILE="${SCRIPT_DIR}/.rpms-installed"
+MARKER_FILE="/var/lib/.v2_rpms_installed"
 
 #-------------------------------------------------------------------------------
 # Check if already installed
@@ -109,20 +109,21 @@ log_step "Installing RPM packages..."
 
 # Try dnf first (recommended), fallback to rpm
 if command -v dnf &>/dev/null; then
-    log_info "Using dnf..."
+    log_info "Using dnf (pass 1: resolve dependencies)..."
     dnf localinstall -y \
         --allowerasing \
-        --nobest \
-        --skip-broken \
         --disablerepo="*" \
-        *.rpm 2>&1 | tail -20 || {
-        log_warn "dnf had issues, trying rpm..."
-        rpm -Uvh --force --nodeps *.rpm 2>&1 | tail -20 || true
+        *.rpm 2>&1 | tail -30 || {
+        log_warn "dnf had dependency issues, using rpm (pass 2: force install)..."
+        rpm -Uvh --force --nodeps *.rpm 2>&1 | tail -30 || true
     }
 else
     log_info "Using rpm..."
-    rpm -Uvh --force --nodeps *.rpm 2>&1 | tail -20 || true
+    rpm -Uvh --force --nodeps *.rpm 2>&1 | tail -30 || true
 fi
+
+# Reload systemd to pick up new service files (e.g. redis.service)
+systemctl daemon-reload 2>/dev/null || true
 
 log_info "RPM packages installed"
 
