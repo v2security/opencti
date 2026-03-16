@@ -1,0 +1,21 @@
+[Unit]
+Description=Maltrail IOC sync — clone + compare + update MySQL
+Wants=network-online.target
+After=network-online.target mysql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/tools
+ExecStart=/opt/tools/maltrail-sync
+EnvironmentFile=/opt/tools/.env
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=maltrail-sync
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/tools/data
+PrivateTmp=yes
