@@ -42,16 +42,18 @@
 #   systemctl status redis minio rabbitmq
 #
 #   # 5. Setup OpenCTI Platform (create Python venv)
-#   /etc/saids/opencti/v2_setup_opencti.sh
+#   v2_setup_opencti.sh
 #
 #   # 6. Setup OpenCTI Worker (create Python venv)
-#   /etc/saids/opencti-worker/v2_setup_opencti_worker.sh
+#   v2_setup_opencti_worker.sh
 #
 #   # 7. Start OpenCTI
 #   systemctl enable opencti-platform
 #   systemctl start opencti-platform
 #   systemctl status opencti-platform
+
 #   # Wait ~60s for platform to initialize...
+
 #   systemctl enable opencti-worker@{1..3}
 #   systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
 #   systemctl status opencti-worker@1 opencti-worker@2 opencti-worker@3
@@ -74,6 +76,23 @@ services:
         condition: service_healthy
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
+
+      # ══════════════════════════════════════════════════════════
+      # Shared .env — config tập trung cho Platform + Worker + Tools
+      # Mount .env thật từ root repo để test với credential thật
+      # Trên bare-metal, v2_unpack_opencti.sh copy .env.example → .env
+      # ══════════════════════════════════════════════════════════
+      - ./config/.env:/etc/saids/opencti/.env
+
+      # ══════════════════════════════════════════════════════════
+      # Configs (tập trung config/) → mount vào đúng path service
+      # ══════════════════════════════════════════════════════════
+      - ./config/redis.conf:/etc/redis/redis.conf:ro
+      - ./config/minio.conf:/etc/minio/minio.conf:ro
+      - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./config/rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
+      - ./config/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./config/logrotate.conf:/etc/logrotate.d/opencti:ro
 
       # ══════════════════════════════════════════════════════════
       # RPMs — packages + install script → /tmp/rpms/
@@ -114,16 +133,6 @@ services:
       - ./rabbitmq/v2_uninstall_rabbitmq.sh:/usr/local/bin/v2_uninstall_rabbitmq.sh:ro
 
       # ══════════════════════════════════════════════════════════
-      # Configs (tập trung config/) → mount vào đúng path service
-      # ══════════════════════════════════════════════════════════
-      - ./config/redis.conf:/etc/redis/redis.conf:ro
-      - ./config/minio.conf:/etc/minio/minio.conf:ro
-      - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
-      - ./config/rabbitmq-env.conf:/etc/rabbitmq/rabbitmq-env.conf:ro
-      - ./config/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
-      - ./config/logrotate.conf:/etc/logrotate.d/opencti:ro
-
-      # ══════════════════════════════════════════════════════════
       # Systemd service units
       # ══════════════════════════════════════════════════════════
       - ./systemd/minio.service:/etc/systemd/system/minio.service:ro
@@ -132,24 +141,29 @@ services:
       - ./systemd/opencti-worker@.service:/etc/systemd/system/opencti-worker@.service:ro
 
       # ══════════════════════════════════════════════════════════
-      # OpenCTI Platform — source + build
-      # (populated by v2_prepare_opencti.sh trên host)
+      # OpenCTI Platform — source + build (KHÔNG mount v2_*.sh)
+      # Scripts mount riêng ở /usr/local/bin/ bên dưới
       # ══════════════════════════════════════════════════════════
       - ./opencti:/etc/saids/opencti
 
       # ══════════════════════════════════════════════════════════
-      # OpenCTI Worker — source
-      # (populated by v2_prepare_opencti_worker.sh trên host)
+      # OpenCTI Worker — source (KHÔNG mount v2_*.sh)
+      # Scripts mount riêng ở /usr/local/bin/ bên dưới
       # ══════════════════════════════════════════════════════════
       - ./opencti-worker:/etc/saids/opencti-worker
 
       # ══════════════════════════════════════════════════════════
-      # Start/Stop scripts → /usr/local/bin/
+      # Scripts → /usr/local/bin/
       # ══════════════════════════════════════════════════════════
+      - ./opencti/v2_setup_opencti.sh:/usr/local/bin/v2_setup_opencti.sh:ro
       - ./opencti/v2_start_opencti.sh:/usr/local/bin/v2_start_opencti.sh:ro
       - ./opencti/v2_stop_opencti.sh:/usr/local/bin/v2_stop_opencti.sh:ro
+      - ./opencti/v2_uninstall_opencti.sh:/usr/local/bin/v2_uninstall_opencti.sh:ro
+      - ./opencti-worker/v2_setup_opencti_worker.sh:/usr/local/bin/v2_setup_opencti_worker.sh:ro
       - ./opencti-worker/v2_start_opencti_worker.sh:/usr/local/bin/v2_start_opencti_worker.sh:ro
       - ./opencti-worker/v2_stop_opencti_worker.sh:/usr/local/bin/v2_stop_opencti_worker.sh:ro
+      - ./opencti-worker/v2_uninstall_opencti_worker.sh:/usr/local/bin/v2_uninstall_opencti_worker.sh:ro
+      - ./v2_ti_uninstall_all.sh:/usr/local/bin/v2_ti_uninstall_all.sh:ro
 
     ports:
       - "16379:6379"      # Redis
@@ -160,6 +174,7 @@ services:
       - "18080:8080"      # OpenCTI Platform
     environment:
       - container=docker
+      - PYTHONDONTWRITEBYTECODE=1
     mem_limit: 8g
     stop_grace_period: 30s
     restart: unless-stopped
@@ -170,7 +185,7 @@ services:
   # ══════════════════════════════════════════════════════════════
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.0
-    container_name: opencti-elasticsearch
+    container_name: elasticsearch
     hostname: elasticsearch
     environment:
       - discovery.type=single-node

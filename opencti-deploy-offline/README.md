@@ -6,7 +6,19 @@ Deploy OpenCTI 6.9.22 trên Rocky Linux 9 **không cần internet** trên máy t
 
 ## PHẦN 1: MÁY BUILD (có internet)
 
-### Bước 1: Chuẩn bị binaries (chạy 1 lần duy nhất)
+### Bước 1: Clean (nếu cần build lại)
+
+```bash
+cd opencti-deploy-offline
+
+# Hỏi từng component muốn xóa
+./v2_clean_build.sh
+
+# Hoặc xóa tất cả
+./v2_clean_build.sh --all
+```
+
+### Bước 2: Chuẩn bị binaries (chạy 1 lần duy nhất)
 
 ```bash
 # Build Python 3.12 runtime → runtime/python312.tar.gz
@@ -21,42 +33,31 @@ cd runtime && bash v2-build-nodejs.sh
 #   rabbitmq/rabbitmq-server-generic-unix-*.tar.xz
 ```
 
-### Bước 2: Build + Prepare
+### Bước 3: Build + Prepare
 
 ```bash
 cd opencti-deploy-offline
 
 # 2.1 Build backend (yarn install + build:prod)
-cd opencti && ./v2_build_backend.sh
+./opencti/v2_build_backend.sh
 
 # 2.2 Build frontend (React + Relay)
-cd opencti && ./v2_build_frontend.sh
+./opencti/v2_build_frontend.sh
 
 # 2.3 Prepare platform (copy source + download pip packages)
-cd opencti && ./v2_prepare_opencti.sh
+./opencti/v2_prepare_opencti.sh
 
 # 2.4 Prepare worker (copy source + download pip packages)
-cd opencti-worker && ./v2_prepare_opencti_worker.sh
-```
-
-### Bước 3: Clean (nếu cần build lại)
-
-```bash
-cd opencti-deploy-offline
-
-# Hỏi từng component muốn xóa
-./v2_clean_build.sh
-
-# Hoặc xóa tất cả
-./v2_clean_build.sh --all
+./opencti-worker/v2_prepare_opencti_worker.sh
 ```
 
 ### Bước 4: Pack
 
 ```bash
 cd opencti-deploy-offline
-./v2_pack_cti.sh
+
 # → opencti-offline-deploy.tar.gz (~800MB-1.2GB)
+./v2_pack_opencti.sh
 ```
 
 ### Bước 5: Copy sang máy target
@@ -81,10 +82,12 @@ scp opencti-offline-deploy.tar.gz root@163.223.58.17:/opt/
 ```bash
 cd /opt
 tar xzf opencti-offline-deploy.tar.gz
-bash v2_unpack_cti.sh
+bash v2_unpack_opencti.sh
 ```
 
-Script chỉ **copy files** — không chạy setup, không start gì cả.
+Script copy files vào đúng path cuối cùng, **xóa folder tạm** sau khi xong.
+Còn lại sau unpack: `rpms/` + `runtime/` + `rabbitmq/` (cần cho setup).
+
 Kết quả sau khi chạy xong:
 
 | Nguồn | Đích |
@@ -93,15 +96,14 @@ Kết quả sau khi chạy xong:
 | `minio/v2_*.sh` | `/usr/local/bin/` |
 | `rabbitmq/v2_start/stop/uninstall_rabbitmq.sh` | `/usr/local/bin/` |
 | `runtime/v2_uninstall_*.sh` | `/usr/local/bin/` |
-| `config/redis.conf` | `/etc/redis/redis.conf` |
-| `config/minio.conf` | `/etc/minio/minio.conf` |
-| `config/rabbitmq*.conf`, `enabled_plugins` | `/etc/rabbitmq/` |
-| `config/logrotate.conf` | `/etc/logrotate.d/opencti` |
+| `config/*` | `/etc/redis/`, `/etc/minio/`, `/etc/rabbitmq/`, `/etc/logrotate.d/` |
 | `systemd/*.service` | `/etc/systemd/system/` |
-| `opencti/` | `/etc/saids/opencti/` |
-| `opencti/v2_start/stop/uninstall_opencti.sh` | `/usr/local/bin/` |
-| `opencti-worker/` | `/etc/saids/opencti-worker/` |
-| `opencti-worker/v2_start/stop/uninstall_opencti_worker.sh` | `/usr/local/bin/` |
+| `.env` | `/etc/saids/opencti/.env` |
+| `opencti/*` | `/etc/saids/opencti/` |
+| `opencti/v2_*.sh` | `/usr/local/bin/` |
+| `opencti-worker/*` | `/etc/saids/opencti-worker/` |
+| `opencti-worker/v2_*.sh` | `/usr/local/bin/` |
+| `v2_ti_uninstall.sh` | `/usr/local/bin/` |
 
 ### Bước 2: Cài RPMs
 
@@ -141,40 +143,40 @@ systemctl status redis minio rabbitmq
 ### Bước 7: Setup OpenCTI Platform (Python venv)
 
 ```bash
-/etc/saids/opencti/v2_setup_opencti.sh
+v2_setup_opencti.sh
 ```
 
 ### Bước 8: Setup OpenCTI Worker (Python venv)
 
 ```bash
-/etc/saids/opencti-worker/v2_setup_opencti_worker.sh
+v2_setup_opencti_worker.sh
 ```
 
 ### Bước 9: Sửa credentials ⚠️
 
+File `.env` là **config tập trung duy nhất** cho Platform, Worker và Tools.
+Start scripts tự đọc file này và map sang format riêng của từng component.
+
 ```bash
-vi /usr/local/bin/v2_start_opencti.sh
+vi /etc/saids/opencti/.env
 ```
+
+**Các biến cần sửa:**
 
 | Biến | Mô tả | Default |
 |------|--------|---------|
-| `ELASTICSEARCH__URL` | ES endpoint | `http://localhost:8686` |
-| `APP__ADMIN__EMAIL` | Admin email | `admin@v2secure.vn` |
-| `APP__ADMIN__PASSWORD` | Admin password | *(sửa lại)* |
-| `APP__ADMIN__TOKEN` | API token | *(sửa lại)* |
-| `REDIS__PASSWORD` | Redis password | *(sửa lại)* |
-| `MINIO__ACCESS_KEY` / `MINIO__SECRET_KEY` | MinIO credentials | *(sửa lại)* |
-| `RABBITMQ__USERNAME` / `RABBITMQ__PASSWORD` | RabbitMQ credentials | *(sửa lại)* |
-| `AI__TOKEN` | Anthropic API key | *(optional)* |
-
-```bash
-vi /usr/local/bin/v2_start_opencti_worker.sh
-```
-
-| Biến | Mô tả |
-|------|--------|
-| `OPENCTI_URL` | Phải = `APP__BASE_URL` |
-| `OPENCTI_TOKEN` | Phải = `APP__ADMIN__TOKEN` |
+| `APP_ADMIN_EMAIL` | Admin email | `admin@v2secure.vn` |
+| `APP_ADMIN_PASSWORD` | Admin password | `changeme` |
+| `APP_ADMIN_TOKEN` | API token (UUID) | `changeme-uuid` |
+| `APP_BASE_URL` | URL truy cập | `http://localhost:8080` |
+| `REDIS_PASSWORD` | Redis password | `changeme` |
+| `ELASTICSEARCH_URL` | ES endpoint | `http://localhost:8686` |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO credentials | `opencti` / `changeme` |
+| `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | RabbitMQ credentials | `opencti` / `changeme` |
+| `MYSQL_PASSWORD` | MySQL password (tools) | `changeme` |
+| `AI_TOKEN` | Anthropic API key | *(optional)* |
+| `TOOL_DATA_DIR` | Thư mục data cho tools | `/opt/tools/data` |
+| `VIRUSTOTAL_API_KEY` | VirusTotal API key | *(optional)* |
 
 ### Bước 10: Start OpenCTI
 
@@ -227,10 +229,10 @@ systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
 ### Gỡ bỏ toàn bộ
 
 ```bash
-bash v2_uninstall_cti.sh
+v2_ti_uninstall.sh
 
 # Hoặc giữ data
-KEEP_DATA=true bash v2_uninstall_cti.sh
+KEEP_DATA=true v2_ti_uninstall.sh
 ```
 
 ### Xem logs
@@ -257,9 +259,9 @@ rm /var/lib/.v2_setup_opencti_worker_done  # Worker
 ```
 opencti-deploy-offline/
 ├── v2_clean_build.sh             ★ Xóa artifacts để build lại (máy build)
-├── v2_pack_cti.sh                ★ Đóng gói → archive
-├── v2_unpack_cti.sh              ★ Đặt files vào đúng chỗ (máy target)
-├── v2_uninstall_cti.sh           ★ Gỡ bỏ toàn bộ
+├── v2_pack_opencti.sh            ★ Đóng gói → archive
+├── v2_unpack_opencti.sh          ★ Đặt files vào đúng chỗ (máy target)
+├── v2_ti_uninstall.sh            ★ Gỡ bỏ toàn bộ → /usr/local/bin/
 │
 ├── rpms/
 │   ├── v2_install_rpms.sh
@@ -314,7 +316,8 @@ opencti-deploy-offline/
 /opt/nodejs/                   → Node.js 22
 /opt/rabbitmq/                 → RabbitMQ server
 /usr/local/bin/minio           → MinIO binary
-/usr/local/bin/v2_*.sh         → Tất cả scripts
+/usr/local/bin/v2_*.sh         → Tất cả scripts (setup/start/stop/uninstall)
+/usr/local/bin/v2_ti_uninstall.sh → Gỡ toàn bộ stack
 /usr/bin/redis-server          → Redis (RPM)
 
 /etc/saids/opencti/            ★ Platform
@@ -365,8 +368,8 @@ cd /tmp/runtime && bash v2_install_python.sh && bash v2_install_nodejs.sh
 v2_setup_minio.sh
 cd /tmp/rabbitmq && bash v2_setup_rabbitmq.sh
 systemctl enable --now redis minio rabbitmq
-/etc/saids/opencti/v2_setup_opencti.sh
-/etc/saids/opencti-worker/v2_setup_opencti_worker.sh
+v2_setup_opencti.sh
+v2_setup_opencti_worker.sh
 systemctl enable --now opencti-platform
 # Đợi 60s...
 systemctl enable opencti-worker@{1..3}

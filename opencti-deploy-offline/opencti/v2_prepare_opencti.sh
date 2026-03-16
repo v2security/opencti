@@ -73,7 +73,7 @@ log ""
 # COPY SOURCE + BUILD
 # ══════════════════════════════════════════════════════════════
 log "Syncing src/..."
-rsync -a --delete "$GRAPHQL/src/" "$DEPLOY_DIR/src/"
+rsync -a --delete --exclude='__pycache__' "$GRAPHQL/src/" "$DEPLOY_DIR/src/"
 
 # ── Patch: check_indicator.py (EQL subprocess isolation) ─────
 PATCH_SRC="$OFFLINE_DIR/config/check_indicator.py"

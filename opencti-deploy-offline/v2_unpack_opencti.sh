@@ -1,16 +1,16 @@
 #!/bin/bash
 ###############################################################################
-# v2_unpack_cti.sh — Giải nén + đặt files vào đúng chỗ trên Rocky Linux 9
+# v2_unpack_opencti.sh — Giải nén + đặt files vào đúng chỗ trên Rocky Linux 9
 #
-# Script CHỈ COPY FILES — không chạy setup, không start services.
+# Script COPY FILES vào đúng path cuối cùng, xóa folder tạm sau khi xong.
 # Sau khi chạy xong, bạn tự chạy setup + start theo hướng dẫn.
 #
 # Chạy TRÊN MÁY TARGET (offline) với quyền root.
 #
 # Usage:
-#   cd /opt  (hoặc nơi giải nén archive)
+#   cd /opt
 #   tar xzf opencti-offline-deploy.tar.gz
-#   bash v2_unpack_cti.sh
+#   bash v2_unpack_opencti.sh
 ###############################################################################
 set -euo pipefail
 
@@ -49,7 +49,7 @@ log "── Runtime: giữ tại $SCRIPT_DIR/runtime/"
 log "  → Chạy tay: cd $SCRIPT_DIR/runtime && bash v2_install_python.sh && bash v2_install_nodejs.sh"
 
 # ══════════════════════════════════════════════════════════════
-# 3. MinIO — copy binaries + scripts → /usr/local/bin/
+# 3. MinIO — binaries + scripts → /usr/local/bin/
 # ══════════════════════════════════════════════════════════════
 log ""
 log "── MinIO → /usr/local/bin/"
@@ -61,9 +61,11 @@ for f in minio/v2_*.sh; do
     chmod +x "/usr/local/bin/$(basename "$f")"
 done
 log "  ✓ minio, mc, v2_*minio*.sh"
+rm -rf minio/
+log "  ✓ minio/ cleaned up"
 
 # ══════════════════════════════════════════════════════════════
-# 4. RabbitMQ — copy scripts → /usr/local/bin/, tarball giữ tại chỗ
+# 4. RabbitMQ — tarball giữ tại chỗ, scripts → /usr/local/bin/
 # ══════════════════════════════════════════════════════════════
 log ""
 log "── RabbitMQ scripts → /usr/local/bin/"
@@ -114,6 +116,20 @@ log "  ✓ /etc/rabbitmq/"
 cp -f config/logrotate.conf /etc/logrotate.d/opencti
 log "  ✓ /etc/logrotate.d/opencti"
 
+# .env + .env.example → /etc/saids/opencti/
+mkdir -p /etc/saids/opencti
+if [[ ! -f /etc/saids/opencti/.env ]]; then
+    cp -f config/.env /etc/saids/opencti/.env
+    log "  ✓ config/.env → /etc/saids/opencti/.env (NEW — kiểm tra credentials!)"
+else
+    log "  ⏭  /etc/saids/opencti/.env đã tồn tại — giữ nguyên"
+fi
+cp -f config/.env.example /etc/saids/opencti/.env.example
+log "  ✓ config/.env.example → /etc/saids/opencti/.env.example"
+
+rm -rf config/
+log "  ✓ config/ cleaned up"
+
 # ══════════════════════════════════════════════════════════════
 # 7. Systemd service units → /etc/systemd/system/
 # ══════════════════════════════════════════════════════════════
@@ -125,52 +141,73 @@ cp -f systemd/opencti-platform.service  /etc/systemd/system/opencti-platform.ser
 cp -f systemd/opencti-worker@.service   /etc/systemd/system/opencti-worker@.service
 systemctl daemon-reload
 log "  ✓ 4 services installed + daemon-reload"
+rm -rf systemd/
+log "  ✓ systemd/ cleaned up"
 
 # ══════════════════════════════════════════════════════════════
 # 8. OpenCTI Platform → /etc/saids/opencti/
 # ══════════════════════════════════════════════════════════════
 log ""
 log "── OpenCTI Platform → /etc/saids/opencti/"
-PLATFORM_DIR="/etc/saids/opencti"
-mkdir -p "$PLATFORM_DIR"
 rsync -a \
     --exclude='.python-venv' \
     --exclude='logs' \
     --exclude='.support' \
     --exclude='telemetry' \
     --exclude='__pycache__' \
-    --exclude='v2_build_backend.sh' \
-    --exclude='v2_build_frontend.sh' \
-    --exclude='v2_prepare_opencti.sh' \
-    opencti/ "$PLATFORM_DIR/"
-log "  ✓ Platform files copied"
+    --exclude='v2_*.sh' \
+    --exclude='.env' \
+    --exclude='.env.example' \
+    opencti/ /etc/saids/opencti/
+log "  ✓ Platform files → /etc/saids/opencti/ (không có v2_*.sh, .env)"
 
-# Start/stop/uninstall → /usr/local/bin/
+# Platform scripts → /usr/local/bin/
 cp -f opencti/v2_start_opencti.sh     /usr/local/bin/v2_start_opencti.sh
 cp -f opencti/v2_stop_opencti.sh      /usr/local/bin/v2_stop_opencti.sh
 cp -f opencti/v2_uninstall_opencti.sh /usr/local/bin/v2_uninstall_opencti.sh
+cp -f opencti/v2_setup_opencti.sh     /usr/local/bin/v2_setup_opencti.sh
 chmod +x /usr/local/bin/v2_*opencti*.sh
-log "  ✓ v2_start/stop/uninstall_opencti.sh → /usr/local/bin/"
+log "  ✓ v2_start/stop/setup/uninstall_opencti.sh → /usr/local/bin/"
+rm -rf opencti/
+log "  ✓ opencti/ cleaned up"
 
 # ══════════════════════════════════════════════════════════════
 # 9. OpenCTI Worker → /etc/saids/opencti-worker/
 # ══════════════════════════════════════════════════════════════
 log ""
 log "── OpenCTI Worker → /etc/saids/opencti-worker/"
-WORKER_DIR="/etc/saids/opencti-worker"
-mkdir -p "$WORKER_DIR"
+mkdir -p /etc/saids/opencti-worker
 rsync -a \
     --exclude='.python-venv' \
     --exclude='__pycache__' \
-    --exclude='v2_prepare_opencti_worker.sh' \
-    opencti-worker/ "$WORKER_DIR/"
-log "  ✓ Worker files copied"
+    --exclude='v2_*.sh' \
+    opencti-worker/ /etc/saids/opencti-worker/
+log "  ✓ Worker files → /etc/saids/opencti-worker/ (không có v2_*.sh)"
 
+# Worker scripts → /usr/local/bin/
 cp -f opencti-worker/v2_start_opencti_worker.sh     /usr/local/bin/v2_start_opencti_worker.sh
 cp -f opencti-worker/v2_stop_opencti_worker.sh      /usr/local/bin/v2_stop_opencti_worker.sh
 cp -f opencti-worker/v2_uninstall_opencti_worker.sh /usr/local/bin/v2_uninstall_opencti_worker.sh
+cp -f opencti-worker/v2_setup_opencti_worker.sh     /usr/local/bin/v2_setup_opencti_worker.sh
 chmod +x /usr/local/bin/v2_*worker*.sh
-log "  ✓ v2_start/stop/uninstall_opencti_worker.sh → /usr/local/bin/"
+log "  ✓ v2_start/stop/setup/uninstall_opencti_worker.sh → /usr/local/bin/"
+rm -rf opencti-worker/
+log "  ✓ opencti-worker/ cleaned up"
+
+# ══════════════════════════════════════════════════════════════
+# 10. Global uninstall script → /usr/local/bin/
+# ══════════════════════════════════════════════════════════════
+log ""
+log "── v2_ti_uninstall_all.sh → /usr/local/bin/"
+cp -f v2_ti_uninstall_all.sh /usr/local/bin/v2_ti_uninstall_all.sh
+chmod +x /usr/local/bin/v2_ti_uninstall_all.sh
+rm -f v2_ti_uninstall_all.sh
+log "  ✓ v2_ti_uninstall_all.sh → /usr/local/bin/"
+
+# ══════════════════════════════════════════════════════════════
+# Cleanup — xóa unpack script (đã chạy xong)
+# ══════════════════════════════════════════════════════════════
+rm -f v2_unpack_opencti.sh
 
 # ══════════════════════════════════════════════════════════════
 # DONE
@@ -180,7 +217,7 @@ log "═════════════════════════
 log "  ✓ FILES PLACED — giờ chạy setup bằng tay"
 log "══════════════════════════════════════════════════════════════"
 log ""
-log "  Xem README.md hoặc chạy theo thứ tự:"
+log "  Còn lại: rpms/ + runtime/ + rabbitmq/ (cần cho setup)"
 log ""
 log "  # 1. RPMs"
 log "  cd $SCRIPT_DIR/rpms && bash v2_install_rpms.sh"
@@ -196,12 +233,11 @@ log "  # 4. Start infra"
 log "  systemctl enable --now redis minio rabbitmq"
 log ""
 log "  # 5. Setup OpenCTI venv"
-log "  /etc/saids/opencti/v2_setup_opencti.sh"
-log "  /etc/saids/opencti-worker/v2_setup_opencti_worker.sh"
+log "  v2_setup_opencti.sh"
+log "  v2_setup_opencti_worker.sh"
 log ""
-log "  # 6. Sửa credentials (QUAN TRỌNG!)"
-log "  vi /usr/local/bin/v2_start_opencti.sh"
-log "  vi /usr/local/bin/v2_start_opencti_worker.sh"
+log "  # 6. Sửa credentials (QUAN TRỌNG! — 1 file duy nhất)"
+log "  vi /etc/saids/opencti/.env"
 log ""
 log "  # 7. Start OpenCTI"
 log "  systemctl enable opencti-platform"

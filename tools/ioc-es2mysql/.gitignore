@@ -1,0 +1,8 @@
+build/
+dist/
+*.spec
+__pycache__/
+*.pyc
+deploy/v2-ioc-blacklist-sync
+deploy/v2-ioc-hashlist-sync
+deploy/GeoLite2-Country.mmdb

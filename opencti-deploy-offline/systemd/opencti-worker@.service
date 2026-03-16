@@ -12,7 +12,8 @@ Type=simple
 User=root
 Group=root
 
-# Start script chứa env vars + exec python3 worker.py
+# Shared config — start script reads this .env
+EnvironmentFile=/etc/saids/opencti/.env
 ExecStart=/bin/bash /usr/local/bin/v2_start_opencti_worker.sh
 
 WorkingDirectory=/etc/saids/opencti-worker/src

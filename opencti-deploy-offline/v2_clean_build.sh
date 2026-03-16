@@ -155,6 +155,8 @@ done
 
 if $has_platform; then
     if confirm "Xóa platform deploy artifacts? (cần chạy lại v2_prepare_opencti.sh)"; then
+        # __pycache__ do Docker (root) tạo → xóa riêng
+        find "$DEPLOY_CTI" -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
         rm -rf "$DEPLOY_CTI/build" "$DEPLOY_CTI/node_modules" "$DEPLOY_CTI/src" \
                "$DEPLOY_CTI/public" "$DEPLOY_CTI/.pip-packages" \
                "$DEPLOY_CTI/config" "$DEPLOY_CTI/static" "$DEPLOY_CTI/script" \
@@ -181,6 +183,8 @@ for d in src .pip-packages; do
 done
 if $has_worker; then
     if confirm "Xóa worker deploy artifacts? (cần chạy lại v2_prepare_opencti_worker.sh)"; then
+        # __pycache__ do Docker (root) tạo → xóa riêng
+        find "$DEPLOY_WORKER" -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
         rm -rf "$DEPLOY_WORKER/src" "$DEPLOY_WORKER/.pip-packages"
         log "Đã xóa opencti-worker/{src,.pip-packages}"
         ((cleaned++))

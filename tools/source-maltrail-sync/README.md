@@ -1,14 +1,13 @@
-# source-maltrail — Maltrail IOC Sync
+# source-maltrail-sync — Maltrail IOC Sync
 
 Daily sync from [maltrail](https://github.com/stamparm/maltrail/) → MySQL `ids_blacklist`.
 
 ## Project Structure
 
 ```
-source-maltrail/
-├── cmd/
-│   └── maltrail-sync/
-│       └── main.go                 # Entry point — orchestrate 4 steps
+source-maltrail-sync/
+├── main.go                         # Entry point — orchestrate 4 steps
+├── Makefile                        # Build target (make build)
 ├── internal/
 │   ├── config/
 │   │   └── config.go               # Load .env, validate env vars
@@ -21,8 +20,10 @@ source-maltrail/
 │       └── mysql.go                # Batch UPDATE ids_blacklist
 ├── .env.example                    # Config template
 ├── go.mod / go.sum
-├── maltrail-sync.service           # Systemd service
-└── maltrail-sync.timer             # Systemd timer (daily 03:00)
+└── deploy/                         # ← Build output + systemd
+    ├── v2-ioc-maltrail-sync        # Binary (built by make)
+    ├── v2-ioc-maltrail-sync.service
+    └── v2-ioc-maltrail-sync.timer
 ```
 
 ## Flow
@@ -42,27 +43,47 @@ Step 4: Update MySQL
   Batch size: 500
 ```
 
-## Setup
+## Build & Deploy
 
 ```bash
 # 1. Config
 cp .env.example .env
 vi .env   # fill MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
 
-# 2. Build
-go build -o maltrail-sync .
+# 2. Build → deploy/
+make build
+# Output: deploy/v2-ioc-maltrail-sync
 
 # 3. Test
-./maltrail-sync
-
-# 4. Deploy + systemd timer
-cp maltrail-sync /opt/tools/
-cp .env /opt/tools/
-cp maltrail-sync.service maltrail-sync.timer /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now maltrail-sync.timer
-
-# Check
-systemctl list-timers maltrail-sync.timer
-journalctl -u maltrail-sync -f
+deploy/v2-ioc-maltrail-sync
 ```
+
+Sau khi build, folder `deploy/` chứa tất cả:
+
+```
+deploy/
+├── v2-ioc-maltrail-sync          # Binary
+├── v2-ioc-maltrail-sync.service  # Systemd service
+└── v2-ioc-maltrail-sync.timer    # Systemd timer
+```
+
+### Deploy lên server
+
+```bash
+# Copy binary
+cp deploy/v2-ioc-maltrail-sync /opt/tools/
+
+# Copy systemd + enable
+cp deploy/v2-ioc-maltrail-sync.service deploy/v2-ioc-maltrail-sync.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now v2-ioc-maltrail-sync.timer
+```
+
+### Check
+
+```bash
+systemctl list-timers v2-ioc-maltrail-sync.timer
+journalctl -u v2-ioc-maltrail-sync -f
+```
+
+Service chạy oneshot qua timer (mỗi ngày 03:00). Env đọc từ `/etc/saids/opencti/.env`.

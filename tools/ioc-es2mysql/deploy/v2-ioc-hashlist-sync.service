@@ -1,0 +1,25 @@
+[Unit]
+Description=Hashlist Sync — OpenCTI Hash + VirusTotal → MySQL (continuous)
+Wants=network-online.target
+After=network-online.target mysql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tools
+ExecStart=/opt/tools/v2-ioc-hashlist-sync
+EnvironmentFile=/etc/saids/opencti/.env
+Restart=on-failure
+RestartSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=v2-ioc-hashlist-sync
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

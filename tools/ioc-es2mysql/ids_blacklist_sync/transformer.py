@@ -85,7 +85,7 @@ def _to_blacklist(obs: dict[str, Any], cfg: dict) -> dict | None:
         "stype": stype,
         "value": value,
         "country": country,
-        "source": _source(obs, defaults.get("source", "opencti")),
+        "source": _source(obs, defaults.get("source", "suspicious")),
         "srctype": defaults.get("srctype", "v2"),
         "type": defaults.get("type", "global"),
         "version": version,

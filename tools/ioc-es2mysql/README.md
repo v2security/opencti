@@ -30,8 +30,17 @@ tools/ioc-es2mysql/
 ├── .env              # Secrets: API token, MySQL password, VT key
 ├── config.yaml       # Tất cả config (${VAR} tham chiếu .env)
 ├── requirements.txt
-├── main.py           # Entry point
-└── ioc_sync/
+├── Makefile          # Build targets (make build)
+├── deploy/           # ← Build output + systemd
+│   ├── v2-ioc-blacklist-sync          # Binary (built by make)
+│   ├── v2-ioc-hashlist-sync           # Binary (built by make)
+│   ├── v2-ioc-blacklist-sync.service  # Systemd service
+│   └── v2-ioc-hashlist-sync.service   # Systemd service
+├── ids_blacklist_sync/
+│   └── main.py       # Entry point — blacklist sync
+├── hashlist_sync/
+│   └── main.py       # Entry point — hashlist sync
+└── util/
     ├── config.py     # Load YAML + resolve ${VAR}
     ├── utils.py      # Logger
     ├── client.py     # Query OpenCTI qua pycti
@@ -65,7 +74,7 @@ Cả hai ngưỡng cấu hình trong `config.yaml → opencti.min_score / min_co
 - `entity_type` → `stype`: IPv4-Addr/IPv6-Addr → `ip`, Domain-Name → `domain`
 - `observable_value` → `value`
 - **GeoIP**: gọi `ip-api.com` cho cả IP lẫn domain (không cần DNS resolve) → `country` format `Country-CountryCode` (vd: `United States-US`, `Japan-JP`). Không resolve được → `none`
-- `createdBy.name` → `source` (fallback: `opencti`)
+- `createdBy.name` → `source` (fallback: `suspicious`)
 - Tất cả rows trong 1 batch cùng `version` (YYYYMMDDHHmmss)
 
 ### 4. Transform Hash → `hashlist`
@@ -78,3 +87,69 @@ Cả hai ngưỡng cấu hình trong `config.yaml → opencti.min_score / min_co
 
 - **Rate limit**: ip-api.com giới hạn 45 req/phút, batch nhỏ tránh bị block
 - **Crash resilience**: mất tối đa 20 item nếu crash, cursor lưu sau mỗi batch
+
+## Build & Deploy
+
+```bash
+# 1. Install dependencies
+make install
+
+# 2. Build binaries → deploy/
+make build
+# Output: deploy/v2-ioc-blacklist-sync, deploy/v2-ioc-hashlist-sync
+```
+
+Sau khi build, folder `deploy/` chứa tất cả file cần thiết để deploy:
+
+```
+deploy/
+├── v2-ioc-blacklist-sync          # Binary
+├── v2-ioc-hashlist-sync           # Binary
+├── v2-ioc-blacklist-sync.service  # Systemd
+└── v2-ioc-hashlist-sync.service   # Systemd
+```
+
+### Deploy lên server
+
+```bash
+# Copy binary + config
+cp deploy/v2-ioc-blacklist-sync deploy/v2-ioc-hashlist-sync /opt/tools/
+cp config.yaml GeoLite2-Country.mmdb /opt/tools/
+
+# Copy systemd + enable
+cp deploy/*.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now v2-ioc-blacklist-sync
+systemctl enable --now v2-ioc-hashlist-sync
+```
+
+### Run manual (test)
+
+```bash
+cd /opt/tools
+./v2-ioc-blacklist-sync          # chạy liên tục
+./v2-ioc-blacklist-sync --once   # chạy 1 lần rồi thoát
+./v2-ioc-hashlist-sync           # chạy liên tục
+./v2-ioc-hashlist-sync --once    # chạy 1 lần rồi thoát
+```
+
+### Check logs
+
+```bash
+systemctl status v2-ioc-blacklist-sync
+journalctl -u v2-ioc-blacklist-sync -f
+journalctl -u v2-ioc-hashlist-sync -f
+```
+
+Cả hai service chạy liên tục (`Type=simple`), tự động restart nếu crash (`Restart=on-failure`, delay 30s).
+Env đọc từ `/etc/saids/opencti/.env`.
+
+### Makefile Targets
+
+| Target           | Description                          |
+|------------------|--------------------------------------|
+| `make install`   | Install Python dependencies          |
+| `make build`     | Build both binaries                  |
+| `make build-blacklist` | Build `v2-ioc-blacklist-sync` only |
+| `make build-hashlist`  | Build `v2-ioc-hashlist-sync` only  |
+| `make clean`     | Remove build artifacts               |

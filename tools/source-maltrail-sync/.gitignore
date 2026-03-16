@@ -1,0 +1,3 @@
+deploy/v2-ioc-maltrail-sync
+!deploy/v2-ioc-maltrail-sync.service
+!deploy/v2-ioc-maltrail-sync.timer

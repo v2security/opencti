@@ -1,6 +1,6 @@
-module source-maltrail
+module github.com/tunv_opencti/tools/ioc-mysql-migrate
 
-go 1.21.0
+go 1.26.1
 
 require (
 	github.com/go-sql-driver/mysql v1.9.3

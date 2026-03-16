@@ -1,24 +1,32 @@
-// tools/ioc-mysql-migration — MySQL schema migration for IOC tables.
+// tools/ioc-mysql-migrate — MySQL schema migration for IOC tables.
+//
+// Reads .env from the same directory as the binary (and cwd).
 //
 // Env vars:
-//   MYSQL_HOST (default 127.0.0.1), MYSQL_PORT (3306),
-//   MYSQL_USER (root), MYSQL_PASSWORD (required), MYSQL_DATABASE (ids)
+//
+//	MYSQL_HOST (default 127.0.0.1), MYSQL_PORT (3306),
+//	MYSQL_USER (required), MYSQL_PASSWORD (required), MYSQL_DATABASE (required)
 //
 // Usage:
-//   export $(grep -v '^#' ../../.env | xargs) && go run main.go
+//
+//	go build -o migrate . && ./migrate
 package main
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/joho/godotenv"
 )
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 func env(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -27,18 +35,32 @@ func env(key, fallback string) string {
 	return fallback
 }
 
+func loadEnvFiles() {
+	// Dev/test: export OPENCTI_ENV_FILE=/workspace/tunv_opencti/.env
+	envFile := os.Getenv("OPENCTI_ENV_FILE")
+	if envFile == "" {
+		envFile = "/etc/saids/opencti/.env"
+	}
+	_ = godotenv.Load(envFile)
+}
+
+func required(key string) string {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		log.Fatalf("missing required env: %s", key)
+	}
+	return v
+}
+
 func main() {
 	log.SetPrefix("[migrate] ")
-
-	password := env("MYSQL_PASSWORD", env("MYSQL_ROOT_PASSWORD", ""))
-	if password == "" {
-		log.Fatal("MYSQL_PASSWORD env var is required")
-	}
+	loadEnvFiles()
 
 	host := env("MYSQL_HOST", "127.0.0.1")
 	port := env("MYSQL_PORT", "3306")
-	user := env("MYSQL_USER", "root")
-	database := env("MYSQL_DATABASE", "ids")
+	user := required("MYSQL_USER")
+	password := required("MYSQL_PASSWORD")
+	database := required("MYSQL_DATABASE")
 
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&multiStatements=true",
 		user, password, host, port, database)
@@ -60,10 +82,10 @@ func main() {
 		applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (id)
 	) ENGINE=InnoDB`)
 
-	// Read migrations/ folder (same level as main.go)
-	files, err := os.ReadDir("migrations")
+	// Read embedded migrations
+	files, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
-		log.Fatalf("Cannot read migrations/: %v", err)
+		log.Fatalf("Cannot read embedded migrations: %v", err)
 	}
 
 	var sqlFiles []string
@@ -84,7 +106,7 @@ func main() {
 			continue
 		}
 
-		content, err := os.ReadFile(filepath.Join("migrations", name))
+		content, err := migrationsFS.ReadFile("migrations/" + name)
 		if err != nil {
 			log.Fatalf("Read %s: %v", name, err)
 		}

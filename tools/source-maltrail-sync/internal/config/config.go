@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -44,16 +43,18 @@ func Load() (*Config, error) {
 	return &Config{
 		MySQL:   mysql,
 		RepoURL: env("MALTRAIL_REPO", "https://github.com/stamparm/maltrail.git"),
-		DataDir: env("DATA_DIR", "../data"),
+		DataDir: env("TOOL_DATA_DIR", "../data"),
 		GitBin:  gitBin,
 	}, nil
 }
 
 func loadEnvFiles() {
-	if exe, err := os.Executable(); err == nil {
-		_ = godotenv.Load(filepath.Join(filepath.Dir(exe), ".env"))
+	// Dev/test: export OPENCTI_ENV_FILE=/workspace/tunv_opencti/.env
+	envFile := os.Getenv("OPENCTI_ENV_FILE")
+	if envFile == "" {
+		envFile = "/etc/saids/opencti/.env"
 	}
-	_ = godotenv.Load(".env")
+	_ = godotenv.Load(envFile)
 }
 
 func loadMySQL() (MySQL, error) {

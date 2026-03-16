@@ -6,13 +6,13 @@ After=network-online.target mysql.service
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/tools
-ExecStart=/opt/tools/maltrail-sync
-EnvironmentFile=/opt/tools/.env
+ExecStart=/opt/tools/v2-ioc-maltrail-sync
+EnvironmentFile=/etc/saids/opencti/.env
 
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=maltrail-sync
+SyslogIdentifier=v2-ioc-maltrail-sync
 
 # Security hardening
 NoNewPrivileges=yes

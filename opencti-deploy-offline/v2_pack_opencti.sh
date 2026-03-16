@@ -78,7 +78,9 @@ check_file "opencti-worker/v2_uninstall_opencti_worker.sh"
 
 log ""
 log "── Config + Systemd ──"
-for f in config/redis.conf config/minio.conf config/rabbitmq.conf config/rabbitmq-env.conf \
+check_file "config/.env"
+for f in config/.env.example \
+         config/redis.conf config/minio.conf config/rabbitmq.conf config/rabbitmq-env.conf \
          config/enabled_plugins config/elasticsearch.yml config/logrotate.conf config/check_indicator.py \
          systemd/minio.service systemd/rabbitmq.service systemd/opencti-platform.service systemd/opencti-worker@.service; do
     check_file "$f"
@@ -86,8 +88,8 @@ done
 
 log ""
 log "── Deploy scripts ──"
-check_file "v2_unpack_cti.sh"
-check_file "v2_uninstall_cti.sh"
+check_file "v2_unpack_opencti.sh"
+check_file "v2_ti_uninstall_all.sh"
 
 [[ "$MISSING" -gt 0 ]] && error "$MISSING files missing — cannot pack!"
 
@@ -106,6 +108,7 @@ tar czf "$ARCHIVE_NAME" \
     --exclude='v2_build_frontend.sh' \
     --exclude='v2_prepare_opencti.sh' \
     --exclude='v2_prepare_opencti_worker.sh' \
+    -C "$SCRIPT_DIR" \
     rpms/ \
     runtime/python312.tar.gz \
     runtime/nodejs22.tar.gz \
@@ -119,8 +122,8 @@ tar czf "$ARCHIVE_NAME" \
     systemd/ \
     opencti/ \
     opencti-worker/ \
-    v2_unpack_cti.sh \
-    v2_uninstall_cti.sh
+    v2_unpack_opencti.sh \
+    v2_ti_uninstall_all.sh
 
 ARCHIVE_SIZE=$(du -sh "$ARCHIVE_NAME" | cut -f1)
 
@@ -130,4 +133,4 @@ log "  ✓ PACK COMPLETE: $ARCHIVE_NAME ($ARCHIVE_SIZE)"
 log "══════════════════════════════════════════════════════════════"
 log ""
 log "  scp $ARCHIVE_NAME root@<target>:/opt/"
-log "  # Trên target: cd /opt && tar xzf $ARCHIVE_NAME && bash v2_unpack_cti.sh"
+log "  # Trên target: cd /opt && tar xzf $ARCHIVE_NAME && bash v2_unpack_opencti.sh"

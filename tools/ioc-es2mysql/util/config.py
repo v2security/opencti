@@ -15,8 +15,19 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(_PROJECT_ROOT / ".env")
+
+def _project_root() -> Path:
+    """Return the directory containing the executable (PyInstaller) or the project root (dev)."""
+    if getattr(sys, "frozen", False):
+        # PyInstaller: use the directory where the binary lives
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+_PROJECT_ROOT = _project_root()
+# Dev/test: export OPENCTI_ENV_FILE=/workspace/tunv_opencti/.env
+_ENV_FILE = os.environ.get("OPENCTI_ENV_FILE", "/etc/saids/opencti/.env")
+load_dotenv(_ENV_FILE)
 
 _ENV_RE = re.compile(r"\$\{([^}]+)\}")
 

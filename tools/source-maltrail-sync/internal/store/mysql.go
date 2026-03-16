@@ -8,7 +8,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"source-maltrail/internal/config"
+	"source-maltrail-sync/internal/config"
 )
 
 const batchSize = 500

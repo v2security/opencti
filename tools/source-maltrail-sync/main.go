@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"source-maltrail/internal/config"
-	"source-maltrail/internal/store"
-	"source-maltrail/internal/trail"
+	"source-maltrail-sync/internal/config"
+	"source-maltrail-sync/internal/store"
+	"source-maltrail-sync/internal/trail"
 )
 
 func main() {
