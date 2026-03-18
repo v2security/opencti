@@ -32,7 +32,7 @@ from parsers.cpe import extract_vulnerable_cpes
 from parsers.cve import get_description
 from stix_builders.relationship import create_relationship
 from stix_builders.software import create_software
-from stix_builders.vulnerability import create_vulnerability
+from stix_builders.vulnerability import create_vulnerability, get_author
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +218,7 @@ class NvdCveConnector:
             return None
 
         vuln = create_vulnerability(cve_data, epss_data=epss_data)
-        objects: list[Any] = [vuln]
+        objects: list[Any] = [get_author(), vuln]
 
         for cpe_match in extract_vulnerable_cpes(cve_data):
             sw = create_software(cpe_match)
