@@ -222,7 +222,9 @@ class NvdCveConnector:
 
         for cpe_match in extract_vulnerable_cpes(cve_data):
             sw = create_software(cpe_match)
-            rel = create_relationship(sw, vuln)
+            rel = create_relationship(
+                sw, vuln, hardware_cpes=cpe_match.get("_hardware_cpes")
+            )
             objects.extend([sw, rel])
 
         return Bundle(objects=objects, allow_custom=True)

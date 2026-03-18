@@ -34,17 +34,38 @@ def extract_vulnerable_cpes(cve_data: dict) -> list[dict]:
 
     Returns a list of dicts with 'criteria' (CPE string) and optional
     version range fields (versionStartIncluding, versionEndExcluding, etc.).
+
+    When a configuration uses an AND operator (e.g. software runs on
+    specific hardware), each vulnerable CPE entry gets an extra
+    '_hardware_cpes' key containing the list of non-vulnerable CPE
+    strings from sibling nodes.
     """
     results: list[dict] = []
     seen_cpes: set[str] = set()
 
     for config in cve_data.get("configurations", []):
-        for node in config.get("nodes", []):
+        nodes = config.get("nodes", [])
+        is_and = config.get("operator", "").upper() == "AND"
+
+        # Collect hardware CPEs from non-vulnerable nodes in AND configs
+        hardware_cpes: list[str] = []
+        if is_and:
+            for node in nodes:
+                for match in node.get("cpeMatch", []):
+                    if not match.get("vulnerable", False):
+                        cpe_str = match.get("criteria", "")
+                        if cpe_str:
+                            hardware_cpes.append(cpe_str)
+
+        for node in nodes:
             for match in node.get("cpeMatch", []):
                 if not match.get("vulnerable", False):
                     continue
                 cpe_str = match.get("criteria", "")
                 if cpe_str and cpe_str not in seen_cpes:
                     seen_cpes.add(cpe_str)
-                    results.append(match)
+                    entry = dict(match)
+                    if hardware_cpes:
+                        entry["_hardware_cpes"] = hardware_cpes
+                    results.append(entry)
     return results
