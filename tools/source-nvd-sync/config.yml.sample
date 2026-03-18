@@ -1,0 +1,27 @@
+opencti:
+  url: "http://localhost:8080"
+  token: "ChangeMe"
+
+connector:
+  id: "ChangeMe"                       # Valid UUIDv4
+  type: "EXTERNAL_IMPORT"
+  name: "NVD CVE"
+  scope: "cve"
+  log_level: "info"
+  duration_period: "PT6H"              # ISO 8601 — every 6 hours
+
+nvd:
+  api_key: "ChangeMe"                   # NVD API key (strongly recommended)
+  base_url: "https://services.nvd.nist.gov/rest/json/cves/2.0"
+  request_timeout: 30                  # Per-request timeout (seconds)
+  max_date_range: 120                  # Max days per API query (NVD limit: 120)
+  maintain_data: true                  # Incremental: sync CVEs since last run
+  pull_history: false                  # Historical: pull all CVEs from start year
+  history_start_year: 2019             # Minimum 1999; CVSS v3.1 starts at 2019
+
+epss:
+  enabled: true                        # Enable EPSS enrichment from api.first.org
+  api_url: "https://api.first.org/data/v1/epss"
+  request_timeout: 30                  # Per-request timeout (seconds)
+  request_delay: 0.1                   # Delay between batch requests (seconds)
+  batch_size: 30                       # CVEs per batch request (max 100)

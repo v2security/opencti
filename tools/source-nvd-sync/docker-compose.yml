@@ -1,0 +1,30 @@
+version: "3"
+services:
+  connector-nvd-cve:
+    build: .
+    restart: unless-stopped
+    environment:
+      # --- OpenCTI ---
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      # --- Connector ---
+      - CONNECTOR_ID=${NVD_CONNECTOR_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=NVD CVE
+      - CONNECTOR_SCOPE=cve
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=PT6H
+      # --- NVD API ---
+      - NVD_API_KEY=${NVD_API_KEY}
+      - NVD_BASE_URL=https://services.nvd.nist.gov/rest/json/cves/2.0
+      - NVD_REQUEST_TIMEOUT=30
+      - NVD_MAX_DATE_RANGE=120
+      - NVD_MAINTAIN_DATA=true
+      - NVD_PULL_HISTORY=false
+      - NVD_HISTORY_START_YEAR=2019
+      # --- EPSS enrichment ---
+      - EPSS_ENABLED=true
+      - EPSS_API_URL=https://api.first.org/data/v1/epss
+      - EPSS_REQUEST_TIMEOUT=30
+      - EPSS_REQUEST_DELAY=0.1
+      - EPSS_BATCH_SIZE=30

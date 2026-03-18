@@ -1,0 +1,27 @@
+opencti:
+  url: "http://localhost:8080"
+  token: "f2de8e60-4914-4f69-a42f-6e0c70a72c30"
+
+connector:
+  id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  type: "EXTERNAL_IMPORT"
+  name: "NVD CVE"
+  scope: "cve"
+  log_level: "info"
+  duration_period: "PT6H"
+
+nvd:
+  api_key: "76654363-9199-4363-8ddb-5e44094a8b28"
+  base_url: "https://services.nvd.nist.gov/rest/json/cves/2.0"
+  request_timeout: 30
+  max_date_range: 120
+  maintain_data: true
+  pull_history: false
+  history_start_year: 2019
+
+epss:
+  enabled: true
+  api_url: "https://api.first.org/data/v1/epss"
+  request_timeout: 30
+  request_delay: 0.1
+  batch_size: 30
