@@ -1,4 +1,4 @@
-# source-maltrail-sync — Maltrail IOC Sync
+# source-maltrail-sync — Maltrail IOC Enrich
 
 Daily sync from [maltrail](https://github.com/stamparm/maltrail/) → MySQL `ids_blacklist`.
 

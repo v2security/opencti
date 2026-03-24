@@ -86,7 +86,7 @@ class NvdCveConnector:
                     "Neither maintain_data nor pull_history is enabled; nothing to do"
                 )
         except Exception:
-            self.helper.connector_logger.exception("Sync cycle failed")
+            self.helper.connector_logger.error("Sync cycle failed")
 
     # ------------------------------------------------------------------
     # Sync strategies
@@ -102,9 +102,7 @@ class NvdCveConnector:
             start = now - timedelta(hours=24)
 
         self.helper.connector_logger.info(
-            "Incremental sync: %s → %s",
-            start.isoformat(),
-            now.isoformat(),
+            f"Incremental sync: {start.isoformat()} → {now.isoformat()}"
         )
 
         windows = NvdApiClient.date_windows(
@@ -119,7 +117,7 @@ class NvdCveConnector:
 
         self.helper.set_state({"last_run": now.isoformat()})
         self.helper.connector_logger.info(
-            "Incremental sync complete: %d CVEs synced", total_synced
+            f"Incremental sync complete: {total_synced} CVEs synced"
         )
 
     def _pull_history(self, state: dict, now: datetime) -> None:
@@ -133,9 +131,7 @@ class NvdCveConnector:
             start = datetime.fromisoformat(history_cursor)
 
         self.helper.connector_logger.info(
-            "Historical import: %s → %s",
-            start.isoformat(),
-            now.isoformat(),
+            f"Historical import: {start.isoformat()} → {now.isoformat()}"
         )
 
         windows = NvdApiClient.date_windows(
@@ -160,7 +156,7 @@ class NvdCveConnector:
             }
         )
         self.helper.connector_logger.info(
-            "Historical import complete: %d CVEs synced", total_synced
+            f"Historical import complete: {total_synced} CVEs synced"
         )
 
     # ------------------------------------------------------------------
@@ -198,8 +194,8 @@ class NvdCveConnector:
                 )
                 synced += 1
             except Exception:
-                self.helper.connector_logger.exception(
-                    "Failed to sync %s", cve_id
+                self.helper.connector_logger.error(
+                    f"Failed to sync {cve_id}"
                 )
 
         message = f"Synced {synced}/{len(cve_list)} CVEs"
@@ -213,7 +209,7 @@ class NvdCveConnector:
         """Build a STIX2 Bundle from a single CVE entry."""
         if not get_description(cve_data):
             self.helper.connector_logger.debug(
-                "Skipping %s — no description", cve_data.get("id")
+                f"Skipping {cve_data.get('id')} — no description"
             )
             return None
 

@@ -49,7 +49,7 @@
 
 | Component | Vai trò | Port |
 |---|---|---|
-| **Elasticsearch** | Database chính — lưu trữ & tìm kiếm toàn bộ entities, relationships | 9200 |
+| **Elasticsearch** | Database chính — lưu trữ & tìm kiếm toàn bộ entities, relationships | 8686 |
 | **Redis** | Cache, live event stream, session, distributed lock, pub/sub | 6379 |
 | **RabbitMQ** | Message queue — trung gian giữa connectors ↔ workers | 5672, 15672 |
 | **MinIO** | Object storage (S3-compatible) — lưu file exports, attachments | 9000 |

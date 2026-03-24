@@ -20,24 +20,27 @@ services:
   redis:
     image: redis:8.4.0
     restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.19.9
     ports:
-      - "9200:9200"     # expose HTTP API
+      - "8686:8686"     # expose HTTP API
     volumes:
-      - esdata:/usr/share/elasticsearch/data
+      # - esdata:/usr/share/elasticsearch/data
+      - esdata-test:/usr/share/elasticsearch/data
     environment:
       # Comment-out the line below for a cluster of multiple nodes
       - discovery.type=single-node
       # Uncomment the line below below for a cluster of multiple nodes
       # - cluster.name=docker-cluster
+      - http.port=8686
       - xpack.ml.enabled=false
       - xpack.security.enabled=false
       - thread_pool.search.queue_size=5000
@@ -52,7 +55,7 @@ services:
         soft: 65536
         hard: 65536
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://elasticsearch:9200/_cluster/health?wait_for_status=yellow >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -s http://elasticsearch:8686/_cluster/health?wait_for_status=yellow >/dev/null || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 50
@@ -63,8 +66,8 @@ services:
     ports:
       - "9000:9000"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}    
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}    
     command: server /data
     restart: always
     healthcheck:
@@ -75,14 +78,17 @@ services:
   rabbitmq:
     image: rabbitmq:4.2-management
     environment:
-      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USERNAME}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
       - RABBITMQ_NODENAME=rabbit01@localhost
+    ports:
+      - "5672:5672"
+      - "15672:15672"
     volumes:
       - type: bind
         source: ./rabbitmq.conf
         target: /etc/rabbitmq/rabbitmq.conf 
-      - amqpdata:/var/lib/rabbitmq
+      - rabbitmqdata:/var/lib/rabbitmq
     restart: always
     healthcheck:
       test: rabbitmq-diagnostics -q ping
@@ -119,8 +125,8 @@ services:
       - "MANAGER__NAME=XTM Integrations Manager"
       - MANAGER__CREDENTIALS_KEY_FILEPATH=/keys/private_key.pem
       - OPENCTI__ENABLE=true
-      - OPENCTI__URL=http://opencti:8080
-      - OPENCTI__TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - OPENCTI__URL=http://opencti:${APP_PORT}
+      - OPENCTI__TOKEN=${APP_ADMIN_TOKEN}
       - OPENCTI__DAEMON__SELECTOR=docker
       - OPENCTI__DAEMON__DOCKER__NETWORK_MODE=${COMPOSE_PROJECT_NAME}_default
     volumes:
@@ -146,45 +152,46 @@ services:
     image: opencti/platform:${OPENCTI_VERSION}-custom
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
-      - APP__PORT=8080
-      - APP__BASE_URL=${OPENCTI_EXTERNAL_SCHEME}://${OPENCTI_HOST}:${OPENCTI_PORT}
-      - APP__ADMIN__EMAIL=${OPENCTI_ADMIN_EMAIL}
-      - APP__ADMIN__PASSWORD=${OPENCTI_ADMIN_PASSWORD}
-      - APP__ADMIN__TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - APP__PORT=${APP_PORT}
+      - APP__BASE_URL=${APP_BASE_URL}
+      - APP__ADMIN__EMAIL=${APP_ADMIN_EMAIL}
+      - APP__ADMIN__PASSWORD=${APP_ADMIN_PASSWORD}
+      - APP__ADMIN__TOKEN=${APP_ADMIN_TOKEN}
       - REDIS__HOSTNAME=redis
       - REDIS__PORT=6379
-      - ELASTICSEARCH__URL=http://elasticsearch:9200
+      - REDIS__PASSWORD=${REDIS_PASSWORD}
+      - ELASTICSEARCH__URL=http://elasticsearch:8686
       - ELASTICSEARCH__NUMBER_OF_REPLICAS=0
       - MINIO__ENDPOINT=minio
       - MINIO__PORT=9000
       - MINIO__USE_SSL=false
-      - MINIO__ACCESS_KEY=${MINIO_ROOT_USER}
-      - MINIO__SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO__ACCESS_KEY=${MINIO_ACCESS_KEY}
+      - MINIO__SECRET_KEY=${MINIO_SECRET_KEY}
       - RABBITMQ__HOSTNAME=rabbitmq
       - RABBITMQ__PORT=5672
       - RABBITMQ__PORT_MANAGEMENT=15672
       - RABBITMQ__MANAGEMENT_SSL=false
-      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
-      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - RABBITMQ__USERNAME=${RABBITMQ_USERNAME}
+      - RABBITMQ__PASSWORD=${RABBITMQ_PASSWORD}
       - SMTP__HOSTNAME=${SMTP_HOSTNAME}
-      - SMTP__PORT=25
+      - SMTP__PORT=${SMTP_PORT}
       - PROVIDERS__LOCAL__STRATEGY=LocalStrategy
-      - APP__HEALTH_ACCESS_KEY=${OPENCTI_HEALTHCHECK_ACCESS_KEY}
+      - APP__HEALTH_ACCESS_KEY=${APP_HEALTH_ACCESS_KEY}
       # AI Configuration - Anthropic Claude (dùng chung cho tất cả AI features)
-      - AI__ENABLED=true
-      - AI__TYPE=anthropic
-      - AI__ENDPOINT=
-      - AI__TOKEN=${ANTHROPIC_API_KEY}
-      - AI__MODEL=${ANTHROPIC_MODEL}
-      - AI__MODEL_IMAGES=
-      - AI__MAX_TOKENS=30000
-      - AI__TIMEOUT=60000
+      - AI__ENABLED=${AI_ENABLED}
+      - AI__TYPE=${AI_TYPE}
+      - AI__ENDPOINT=${AI_ENDPOINT}
+      - AI__TOKEN=${AI_TOKEN}
+      - AI__MODEL=${AI_MODEL}
+      - AI__MODEL_IMAGES=${AI_MODEL_IMAGES}
+      - AI__MAX_TOKENS=${AI_MAX_TOKENS}
+      - AI__TIMEOUT=${AI_TIMEOUT}
       # Chatbot (Ask Ariane) - Anthropic Claude API
-      - CHATBOT__API_KEY=${ANTHROPIC_API_KEY}
-      - CHATBOT__MODEL=${ANTHROPIC_MODEL}
-      - CHATBOT__MAX_TOKENS=4096
+      - CHATBOT__API_KEY=${CHATBOT_API_KEY}
+      - CHATBOT__MODEL=${CHATBOT_MODEL}
+      - CHATBOT__MAX_TOKENS=${CHATBOT_MAX_TOKENS}
     ports:
-      - "${OPENCTI_PORT}:8080"
+      - "${APP_PORT}:${APP_PORT}"
     depends_on:
       redis:
         condition: service_healthy
@@ -196,15 +203,15 @@ services:
         condition: service_healthy
     restart: always
     healthcheck:
-      test:  ["CMD", "wget", "-qO-", "http://opencti:8080/health?health_access_key=${OPENCTI_HEALTHCHECK_ACCESS_KEY}"]
+      test:  ["CMD", "wget", "-qO-", "http://opencti:${APP_PORT}/health?health_access_key=${APP_HEALTH_ACCESS_KEY}"]
       interval: 10s
       timeout: 5s
       retries: 20
   worker:
     image: opencti/worker:${OPENCTI_VERSION}
     environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - OPENCTI_URL=http://opencti:${APP_PORT}
+      - OPENCTI_TOKEN=${APP_ADMIN_TOKEN}
     depends_on:
       opencti:
         condition: service_healthy
@@ -213,355 +220,11 @@ services:
       replicas: 3
     restart: always
 
-  ###########################
-  # OPENCTI DEFAULT DATA    #
-  ###########################
-
-  connector-opencti:
-    image: opencti/connector-opencti:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_OPENCTI_ID}
-      - "CONNECTOR_NAME=OpenCTI Datasets"
-      - CONNECTOR_SCOPE=marking-definition,identity,location
-      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT=true
-      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT_CONFIDENCE_LEVEL=100
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy      
-  connector-mitre:
-    image: opencti/connector-mitre:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_MITRE_ID}
-      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT=true
-      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT_CONFIDENCE_LEVEL=75      
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy  
-
-  ###########################
-  # OPENCTI CONNECTORS      #
-  ###########################
-
-  connector-export-file-stix:
-    image: opencti/connector-export-file-stix:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_STIX_ID} # Valid UUIDv4
-      - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
-      - CONNECTOR_NAME=ExportFileStix2
-      - CONNECTOR_SCOPE=application/json
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-  connector-export-file-csv:
-    image: opencti/connector-export-file-csv:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_CSV_ID} # Valid UUIDv4
-      - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
-      - CONNECTOR_NAME=ExportFileCsv
-      - CONNECTOR_SCOPE=text/csv
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-  connector-export-file-txt:
-    image: opencti/connector-export-file-txt:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_TXT_ID} # Valid UUIDv4
-      - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
-      - CONNECTOR_NAME=ExportFileTxt
-      - CONNECTOR_SCOPE=text/plain
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-  connector-import-file-stix:
-    image: opencti/connector-import-file-stix:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_IMPORT_FILE_STIX_ID} # Valid UUIDv4
-      - CONNECTOR_TYPE=INTERNAL_IMPORT_FILE
-      - CONNECTOR_NAME=ImportFileStix
-      - CONNECTOR_VALIDATE_BEFORE_IMPORT=true # Validate any bundle before import
-      - CONNECTOR_SCOPE=application/json,text/xml
-      - CONNECTOR_AUTO=true # Enable/disable auto-import of file
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-  connector-import-document:
-    image: opencti/connector-import-document:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_IMPORT_DOCUMENT_ID} # Valid UUIDv4
-      - CONNECTOR_TYPE=INTERNAL_IMPORT_FILE
-      - CONNECTOR_NAME=ImportDocument
-      - CONNECTOR_VALIDATE_BEFORE_IMPORT=true # Validate any bundle before import
-      - CONNECTOR_SCOPE=application/pdf,text/plain,text/html
-      - CONNECTOR_AUTO=true # Enable/disable auto-import of file
-      - CONNECTOR_ONLY_CONTEXTUAL=false # Only extract data related to an entity (a report, a threat actor, etc.)
-      - IMPORT_DOCUMENT_CREATE_INDICATOR=true
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-  connector-import-file-yara:
-    image: opencti/connector-import-file-yara:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_IMPORT_FILE_YARA_ID} # Valid UUIDv4
-      - CONNECTOR_NAME=ImportFileYARA
-      - CONNECTOR_VALIDATE_BEFORE_IMPORT=true # Validate any bundle before import
-      - CONNECTOR_SCOPE=text/yara+plain
-      - CONNECTOR_AUTO=false # Enable/disable auto-import of file
-      - YARA_IMPORT_FILE_SPLIT_RULES=true
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-  connector-analysis:
-    image: opencti/connector-import-document:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_ANALYSIS_ID} # Valid UUIDv4
-      - CONNECTOR_TYPE=INTERNAL_ANALYSIS
-      - CONNECTOR_NAME=ImportDocumentAnalysis
-      - CONNECTOR_VALIDATE_BEFORE_IMPORT=false # Validate any bundle before import
-      - CONNECTOR_SCOPE=application/pdf,text/plain,text/html
-      - CONNECTOR_AUTO=true # Enable/disable auto-import of file
-      - CONNECTOR_ONLY_CONTEXTUAL=false # Only extract data related to an entity (a report, a threat actor, etc.)
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-  connector-import-external-reference:
-    image: opencti/connector-import-external-reference:${OPENCTI_VERSION}
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_IMPORT_EXTERNAL_REFERENCE_ID}
-      - CONNECTOR_NAME=ImportExternalReference
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy              
-
-  ###########################
-  # OPENCTI ADDITIONAL      #
-  ###########################
-
-  # docker compose down connector-alienvault
-  # docker compose up -d connector-alienvault
-  connector-alienvault:
-    image: opencti/connector-alienvault:${OPENCTI_VERSION}
-    container_name: connector-alienvault
-    environment:
-      # ===== OpenCTI Core =====
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-
-      # ===== Connector Config =====
-      - CONNECTOR_ID=${CONNECTOR_OTX_ID}
-      - CONNECTOR_TYPE=EXTERNAL_IMPORT
-      - CONNECTOR_NAME=AlienVault OTX
-      - CONNECTOR_SCOPE=alienvault
-      - CONNECTOR_LOG_LEVEL=info
-
-      # ===== OTX Config =====
-      - ALIENVAULT_BASE_URL=https://otx.alienvault.com
-      - ALIENVAULT_API_KEY=${OTX_API_KEY}
-      - ALIENVAULT_TLP=White
-      - ALIENVAULT_CREATE_OBSERVABLES=true
-      - ALIENVAULT_CREATE_INDICATORS=true
-      - ALIENVAULT_ENABLE_RELATIONSHIPS=true
-      - ALIENVAULT_ENABLE_ATTACK_PATTERNS_INDICATES=true
-      - ALIENVAULT_DEFAULT_X_OPENCTI_SCORE=50
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy    
-
-
-  # docker compose down connector-cve
-  # docker compose up -d connector-cve
-  connector-cve:
-    image: opencti/connector-cve:${OPENCTI_VERSION}
-    container_name: connector-cve
-    environment:
-      # ===== OpenCTI Core =====
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-
-      # ===== Connector Config =====
-      - CONNECTOR_ID=${CONNECTOR_CVE_ID}
-      - CONNECTOR_TYPE=EXTERNAL_IMPORT
-      - CONNECTOR_NAME=NVD CVE
-      - CONNECTOR_SCOPE=cve
-      - CONNECTOR_LOG_LEVEL=info
-      - CONNECTOR_DURATION_PERIOD=PT1H
-
-      # ===== NVD / CVE Config =====
-      - CVE_API_KEY=${NVD_API_KEY}
-      - CVE_START_YEAR=2024
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-
-  # docker compose down connector-cpe
-  # docker compose up -d connector-cpe
-  # Import CPE (Software) từ NVD → tạo quan hệ Software --has--> Vulnerability với CVE
-  # Lần đầu sync full (~1M+ entries, mất nhiều giờ), sau đó chỉ sync thay đổi
-  connector-cpe:
-    image: opencti/connector-cpe:${OPENCTI_VERSION}
-    container_name: connector-cpe
-    environment:
-      # ===== OpenCTI Core =====
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-
-      # ===== Connector Config =====
-      - CONNECTOR_ID=${CONNECTOR_CPE_ID}
-      - CONNECTOR_TYPE=EXTERNAL_IMPORT
-      - CONNECTOR_NAME=Common Platform Enumeration
-      - CONNECTOR_SCOPE=software
-      - CONNECTOR_LOG_LEVEL=info
-      - CONNECTOR_DURATION_PERIOD=PT6H
-
-      # ===== CPE / NVD Config (dùng chung API key với CVE connector) =====
-      - CPE_BASE_URL=https://services.nvd.nist.gov/rest/json/cpes/2.0
-      - CPE_API_KEY=${NVD_API_KEY}
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-
-  # docker compose down connector-shodan
-  # docker compose up -d connector-shodan
-  connector-shodan:
-    image: opencti/connector-shodan:${OPENCTI_VERSION}
-    container_name: connector-shodan
-    environment:
-      # ===== OpenCTI Core =====
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-
-      # ===== Connector =====
-      - CONNECTOR_ID=${CONNECTOR_SHODAN_ID}
-      - CONNECTOR_TYPE=INTERNAL_ENRICHMENT
-      - CONNECTOR_NAME=Shodan
-      - CONNECTOR_SCOPE=ipv4-addr
-      - CONNECTOR_LOG_LEVEL=info
-
-      # ===== Shodan =====
-      - SHODAN_TOKEN=${SHODAN_API_KEY}
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-
-  # docker compose down connector-misp-feed
-  # docker compose up -d connector-misp-feed
-  connector-misp-feed:
-    image: opencti/connector-misp-feed:${OPENCTI_VERSION}
-    container_name: connector-misp-feed
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=misp-feed
-      - CONNECTOR_TYPE=EXTERNAL_IMPORT
-      - CONNECTOR_NAME=MISP OSINT Feed
-      - CONNECTOR_SCOPE=misp-feed
-      - CONNECTOR_LOG_LEVEL=info
-      - MISP_FEED_URL=https://www.circl.lu/doc/misp/feed-osint
-      - MISP_FEED_SSL_VERIFY=true
-      - MISP_FEED_IMPORT_FROM_DATE=2024-01-01
-      - MISP_FEED_CREATE_REPORTS=true
-      - MISP_FEED_REPORT_TYPE=misp-event
-      - MISP_FEED_CREATE_INDICATORS=true
-      - MISP_FEED_CREATE_OBSERVABLES=true
-      - MISP_FEED_CREATE_OBJECT_OBSERVABLES=true
-      - MISP_FEED_IMPORT_WITH_ATTACHMENTS=true
-      - MISP_FEED_IMPORT_UNSUPPORTED_OBSERVABLES_AS_TEXT=false
-      - CONNECTOR_DURATION_PERIOD=1d
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-
-  # docker compose down connector-socradar
-  # docker compose up -d connector-socradar
-  connector-socradar:
-    image: opencti/connector-socradar:${OPENCTI_VERSION}
-    container_name: connector-socradar
-    environment:
-      # ===== OpenCTI Core =====
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-
-      # ===== Connector Config =====
-      - CONNECTOR_ID=${CONNECTOR_SOCRADAR_ID}
-      - CONNECTOR_TYPE=EXTERNAL_IMPORT
-      - CONNECTOR_NAME=SOCRadar
-      - CONNECTOR_SCOPE=socradar
-      - CONNECTOR_LOG_LEVEL=info
-      - CONNECTOR_DURATION_PERIOD=PT10M
-
-      # ===== SOCRadar Config =====
-      - RADAR_BASE_FEED_URL=https://platform.socradar.com/api/threat/intelligence/feed_list/
-      - RADAR_SOCRADAR_KEY=${SOCRADAR_API_KEY}
-      - 'RADAR_FEED_LISTS=${SOCRADAR_FEED_LISTS}'
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-
-  # docker compose down connector-maltrail
-  # docker compose up -d connector-maltrail
-  connector-maltrail:
-    image: opencti/connector-maltrail:${OPENCTI_VERSION}
-    container_name: connector-maltrail
-    environment:
-      - OPENCTI_URL=http://opencti:8080
-      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-      - CONNECTOR_ID=${CONNECTOR_MALTRAIL_ID}
-      - "CONNECTOR_NAME=Maltrail" # Optional (default: 'Maltrail')
-      - CONNECTOR_SCOPE=maltrail
-      - CONNECTOR_LOG_LEVEL=error # Optional (default: 'error')
-      - CONNECTOR_DURATION_PERIOD=P1D # Optional (default: 1 day)
-      - MALTRAIL_IMPORT_CATEGORIES=malware,static # Optional (default: 'malware'), comma-separated: malware,suspicious
-      - MALTRAIL_CREATE_INDICATORS=true # Optional (default: true)
-      - MALTRAIL_CREATE_OBSERVABLES=true # Optional (default: true)
-      - MALTRAIL_MALWARE_SCORE=50 # Optional (default: 50)
-      - MALTRAIL_SUSPICIOUS_SCORE=30 # Optional (default: 30)
-      - MALTRAIL_DEFAULT_SCORE=40 # Optional (default: 40)
-      - MALTRAIL_BATCH_SIZE=2000 # Optional (default: 2000)
-      - MALTRAIL_MAX_IOCS_PER_FAMILY=5000 # Optional (default: 5000, 0 = unlimited)
-    restart: always
-    depends_on:
-      opencti:
-        condition: service_healthy
-
 volumes:
-  esdata:
+  # esdata:
+  esdata-test:
   s3data:
   redisdata:
-  amqpdata:
+  rabbitmqdata:
   rsakeys:
   mysqldata:

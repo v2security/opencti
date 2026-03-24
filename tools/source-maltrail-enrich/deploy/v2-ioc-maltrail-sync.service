@@ -1,5 +1,5 @@
 [Unit]
-Description=Maltrail IOC sync — clone + compare + update MySQL
+Description=Maltrail IOC Enrich — clone + compare + update MySQL
 Wants=network-online.target
 After=network-online.target mysql.service
 

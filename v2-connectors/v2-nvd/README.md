@@ -104,7 +104,7 @@ pip3 install -r requirements.txt
 
 ```bash
 cd src
-python3 -m __main__
+python3 __main__.py
 ```
 
 ## Usage

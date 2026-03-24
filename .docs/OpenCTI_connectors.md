@@ -1,12 +1,12 @@
 https://www.gartner.com/en
 
 **Source-Domain:**
-+ https://www.kryptoslogic.com/products/telltale/
-+ https://nvd.nist.gov/vuln/data-feeds
-+ https://www.misp-project.org/
-+ https://otx.alienvault.com/ 
-+ https://www.shodan.io/
-+ https://socradar.io/ 
++ https://www.kryptoslogic.com/products/telltale -> IP Botne > Cần IP Bot
++ https://nvd.nist.gov/vuln/data-feeds 
++ https://www.misp-project.org 
++ https://otx.alienvault.com 
++ https://www.shodan.io 
++ https://socradar.io 
 
 # Source
 
@@ -21,7 +21,7 @@ https://www.gartner.com/en
 |  4  | **Shodan** | Dữ liệu scan IP, port, banner, SSL | ✅ Có | Internal Enrichment | Dùng để enrich IP/domain đã có trong OpenCTI (không ingest bulk feed). |
 |  5  | **Kryptoslogic Telltale** (botnet)  | Exposed credentials, threat data | ❌ Không chính thức | Custom | Cần API + tự viết connector nếu muốn ingest. |
 |  6  | **SOCRadar** | Threat intel, dark web, brand monitoring | ❌ Không chính thức | Custom | Có API/STIX nhưng cần build connector riêng hoặc import STIX thủ công. |
-| 7 | **Maltrail** | Network-based threat detection (malicious IP/domain, traffic patterns) | ❌ Không chính thức | Custom | Không phải nguồn TI thuần (feed CTI đầy đủ), mà là IDS nhẹ phát hiện traffic độc hại. Có thể export log/JSON để ingest vào OpenCTI, nhưng cần build connector riêng hoặc pipeline qua Logstash/Elastic. |
+| 7   | **Maltrail** | Network-based threat detection (malicious IP/domain, traffic patterns) | ❌ Không chính thức | Custom | Không phải nguồn TI thuần (feed CTI đầy đủ), mà là IDS nhẹ phát hiện traffic độc hại. Có thể export log/JSON để ingest vào OpenCTI, nhưng cần build connector riêng hoặc pipeline qua Logstash/Elastic. |
 
 
 # Planing

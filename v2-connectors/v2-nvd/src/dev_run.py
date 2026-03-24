@@ -3,7 +3,7 @@
 Dev helper: run the connector for a single CVE ID or an entire file.
 
 Usage:
-    cd tools/source-nvd-sync/src && conda activate opencti
+    cd tools/source-nvd-connector/src && conda activate opencti
     
     # Fetch from NVD API and send to OpenCTI:
     python dev_run.py CVE-2025-15112

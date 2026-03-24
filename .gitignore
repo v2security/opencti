@@ -12,6 +12,28 @@
 # NodeJS
 node_modules/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+tools/data
+v2-connectors/data
+
+# Deploy artifacts
+opencti-deploy-offline/backup
+opencti-deploy-offline/rpms/*.rpm
+opencti-deploy-offline/minio/mc
+opencti-deploy-offline/minio/minio
+opencti-deploy-offline/runtime/nodejs22.tar.gz
+opencti-deploy-offline/runtime/python312.tar.gz
+opencti-deploy-offline/runtime/Python-3.12.8.tgz
+opencti-deploy-offline/runtime/node-v22.15.0-linux-x64.tar.xz
+opencti-deploy-offline/rabbitmq/rabbitmq-server-generic-unix-4.2.0.tar.xz
+
+opencti-deploy-offline/opencti/logs
+opencti-deploy-offline/opencti/.support
+opencti-deploy-offline/opencti/telemetry
+
 # Yarn
 .yarn/
 opencti-platform/opencti-front/.yarnrc.yml
