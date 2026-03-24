@@ -14,15 +14,12 @@ STIX_NAMESPACE = uuid.UUID("00abedb4-aa42-466c-9c01-fed23315a9b7")
 
 NVD_DETAIL_URL = "https://nvd.nist.gov/vuln/detail"
 
-# Default NVD API key — override via NVD_API_KEY env var or config.yml
-_DEFAULT_NVD_API_KEY = "76654363-9199-4363-8ddb-5e44094a8b28"
-
 
 class ConnectorConfig:
     """Holds all connector configuration, loaded once at startup."""
 
     def __init__(self, config: dict):
-        # --- OpenCTI ---
+        # --- OpenCTI (secrets from .env) ---
         self.opencti_url = get_config_variable(
             "OPENCTI_URL", ["opencti", "url"], config
         )
@@ -59,12 +56,11 @@ class ConnectorConfig:
             default="PT6H",
         )
 
-        # --- NVD API ---
+        # --- NVD API (api_key from .env) ---
         self.nvd_api_key = get_config_variable(
             "NVD_API_KEY",
             ["nvd", "api_key"],
             config,
-            default=_DEFAULT_NVD_API_KEY,
         )
         self.nvd_base_url = get_config_variable(
             "NVD_BASE_URL",

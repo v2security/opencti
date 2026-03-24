@@ -7,9 +7,22 @@ import sys
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 from pycti import OpenCTIConnectorHelper, get_config_variable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Load .env from v2-connectors/ (walk up from this file's location)
+def _find_and_load_env() -> None:
+    current = Path(__file__).resolve().parent
+    for _ in range(6):
+        env_file = current / ".env"
+        if env_file.is_file():
+            load_dotenv(env_file, override=False)
+            return
+        current = current.parent
+
+_find_and_load_env()
 
 from parsers.botnet import parse_file
 from stix_builder.bundle import build_bundle
@@ -48,38 +61,39 @@ class BotnetConnector:
             default="PT5M",
         )
 
-
     def process_data(self) -> None:
         self.helper.connector_logger.info("Botnet connector: starting sync cycle")
 
         if not self.storage_dir.exists():
             self.helper.connector_logger.warning(
-                "Storage dir does not exist: %s", self.storage_dir
+                f"Storage dir does not exist: {self.storage_dir}"
             )
             return
 
         json_files = sorted(self.storage_dir.glob("*.json"))
         if not json_files:
-            self.helper.connector_logger.info("No JSON files found in %s", self.storage_dir)
+            self.helper.connector_logger.info(
+                f"No JSON files found in {self.storage_dir}"
+            )
             return
 
         for json_file in json_files:
             try:
                 self._process_file(json_file)
             except Exception:
-                self.helper.connector_logger.exception(
-                    "Failed to process file %s", json_file.name
+                self.helper.connector_logger.error(
+                    f"Failed to process file {json_file.name}"
                 )
 
     def _process_file(self, json_file: Path) -> None:
-        self.helper.connector_logger.info("Processing file: %s", json_file.name)
+        self.helper.connector_logger.info(f"Processing file: {json_file.name}")
 
         try:
             with json_file.open(encoding="utf-8") as f:
                 data = json.load(f)
         except (json.JSONDecodeError, ValueError):
-            self.helper.connector_logger.exception(
-                "Malformed JSON in %s — deleting", json_file.name
+            self.helper.connector_logger.error(
+                f"Malformed JSON in {json_file.name} — deleting"
             )
             json_file.unlink(missing_ok=True)
             return
@@ -87,7 +101,7 @@ class BotnetConnector:
         events = parse_file(data)
         if not events:
             self.helper.connector_logger.info(
-                "No events found in %s", json_file.name
+                f"No events found in {json_file.name}"
             )
             json_file.unlink(missing_ok=True)
             return
@@ -115,7 +129,6 @@ class BotnetConnector:
         self.helper.api.work.to_processed(work_id, message)
         self.helper.connector_logger.info(message)
         json_file.unlink(missing_ok=True)
-
 
     def start(self) -> None:
         self.helper.schedule_iso(

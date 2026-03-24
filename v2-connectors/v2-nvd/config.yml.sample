@@ -1,9 +1,10 @@
+# NVD CVE Connector — non-sensitive settings only.
+# Secrets (OPENCTI_TOKEN, CONNECTOR_ID, NVD_API_KEY) come from .env or env vars.
+
 opencti:
   url: "http://localhost:8080"
-  token: "ChangeMe"
 
 connector:
-  id: "ChangeMe"                       # Valid UUIDv4
   type: "EXTERNAL_IMPORT"
   name: "NVD CVE"
   scope: "cve"
@@ -11,7 +12,6 @@ connector:
   duration_period: "PT6H"              # ISO 8601 — every 6 hours
 
 nvd:
-  api_key: "ChangeMe"                   # NVD API key (strongly recommended)
   base_url: "https://services.nvd.nist.gov/rest/json/cves/2.0"
   request_timeout: 30                  # Per-request timeout (seconds)
   max_date_range: 120                  # Max days per API query (NVD limit: 120)

@@ -9,9 +9,11 @@ import os
 import sys
 from pathlib import Path
 
+import yaml
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Load .env (walk up up to 6 levels) before reading env vars
+# Load .env from v2-connectors/ (walk up from this file's location)
 def _load_env() -> None:
     try:
         from dotenv import load_dotenv
@@ -27,6 +29,17 @@ def _load_env() -> None:
 
 _load_env()
 
+# Load config.yml for non-sensitive settings
+def _load_config() -> dict:
+    config_path = Path(__file__).resolve().parent.parent / "config.yml"
+    if config_path.is_file():
+        with open(config_path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+_RAW_CONFIG = _load_config()
+
+from pycti import get_config_variable
 from parsers.botnet import parse_file
 from stix_builder.bundle import build_bundle
 
@@ -38,28 +51,34 @@ logger = logging.getLogger(__name__)
 
 
 def _build_opencti_config() -> dict:
-    """Build OpenCTI connector config from environment variables."""
-    url = os.getenv("OPENCTI_URL", "http://localhost:8080")
-    token = os.getenv("OPENCTI_TOKEN") or os.getenv("APP_ADMIN_TOKEN")
+    """Build OpenCTI connector config from config.yml + env vars."""
+    url = get_config_variable("OPENCTI_URL", ["opencti", "url"], _RAW_CONFIG, default="http://localhost:8080")
+    token = get_config_variable("OPENCTI_TOKEN", ["opencti", "token"], _RAW_CONFIG)
     if not token:
-        logger.error(
-            "OPENCTI_TOKEN is not set — add it to .env or export the env var"
-        )
+        logger.error("OPENCTI_TOKEN is not set — add it to .env or export the env var")
         sys.exit(1)
     return {
         "opencti": {"url": url, "token": token},
         "connector": {
-            "id": os.getenv("CONNECTOR_ID", "b2c3d4e5-f6a7-8901-bcde-f12345678901"),
-            "type": "EXTERNAL_IMPORT",
-            "name": "Botnet IOC",
-            "scope": "indicator",
-            "log_level": "info",
+            "id": get_config_variable("CONNECTOR_ID", ["connector", "id"], _RAW_CONFIG,
+                                      default="b2c3d4e5-f6a7-8901-bcde-f12345678901"),
+            "type": get_config_variable("CONNECTOR_TYPE", ["connector", "type"], _RAW_CONFIG,
+                                        default="EXTERNAL_IMPORT"),
+            "name": get_config_variable("CONNECTOR_NAME", ["connector", "name"], _RAW_CONFIG,
+                                        default="Botnet IOC"),
+            "scope": get_config_variable("CONNECTOR_SCOPE", ["connector", "scope"], _RAW_CONFIG,
+                                         default="indicator"),
+            "log_level": get_config_variable("CONNECTOR_LOG_LEVEL", ["connector", "log_level"], _RAW_CONFIG,
+                                             default="info"),
         },
     }
 
 
-_DEFAULT_DATA_DIR = (
-    Path(__file__).resolve().parents[2] / "data" / "botnet"
+_DEFAULT_DATA_DIR = Path(
+    get_config_variable(
+        "STORAGE_DIR", ["botnet", "storage_dir"], _RAW_CONFIG,
+        default=str(Path(__file__).resolve().parents[2] / "data" / "botnet"),
+    )
 )
 
 

@@ -13,14 +13,15 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
+import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, HTTPException, Security
-from fastapi.security.api_key import APIKeyHeader
+from fastapi import FastAPI, File, UploadFile, HTTPException
+from pycti import OpenCTIConnectorHelper, get_config_variable
 from watchfiles import watch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Load .env from project root (walk up from this file's location)
+# Load .env from v2-connectors/ (walk up from this file's location)
 def _find_and_load_env() -> None:
     current = Path(__file__).resolve().parent
     for _ in range(6):
@@ -32,39 +33,46 @@ def _find_and_load_env() -> None:
 
 _find_and_load_env()
 
+# Load config.yml for non-sensitive settings
+def _load_config() -> dict:
+    config_path = Path(__file__).resolve().parent.parent / "config.yml"
+    if config_path.is_file():
+        with open(config_path, encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+_RAW_CONFIG = _load_config()
+
 from parsers.botnet import parse_file
 from stix_builder.bundle import build_bundle
-from pycti import OpenCTIApiClient
 
 logger = logging.getLogger(__name__)
 
+# --- OpenCTI ConnectorHelper (registers connector + sends ping alive) ---
+_helper: OpenCTIConnectorHelper | None = None
 
-_OPENCTI_URL        = os.getenv("OPENCTI_URL", "http://localhost:8080")
-_OPENCTI_TOKEN      = os.getenv("OPENCTI_TOKEN") or os.getenv("APP_ADMIN_TOKEN")
-_OPENCTI_SSL_VERIFY = os.getenv("OPENCTI_SSL_VERIFY", "true").strip().lower() not in ("0", "false", "no")
-
-def _get_opencti_client() -> OpenCTIApiClient:
-    if not _OPENCTI_TOKEN:
-        raise ValueError("OPENCTI_TOKEN is not set — add it to .env or set the env var")
-    return OpenCTIApiClient(_OPENCTI_URL, _OPENCTI_TOKEN, ssl_verify=_OPENCTI_SSL_VERIFY)
+def _get_helper() -> OpenCTIConnectorHelper:
+    global _helper
+    if _helper is None:
+        _helper = OpenCTIConnectorHelper(_RAW_CONFIG)
+    return _helper
 
 
 
 
 def _process_worker() -> None:
-    client = _get_opencti_client()
+    helper = _get_helper()
     while True:
         path: Path = _file_queue.get()
         try:
-            _handle_file(path, client)
+            _handle_file(path, helper)
         except Exception:
             logger.exception("Worker: unhandled error processing %s", path.name)
-            client = _get_opencti_client()
         finally:
             _file_queue.task_done()
 
 
-def _handle_file(path: Path, client: OpenCTIApiClient) -> None:
+def _handle_file(path: Path, helper: OpenCTIConnectorHelper) -> None:
     logger.info("Worker: processing %s", path.name)
     try:
         with path.open(encoding="utf-8") as f:
@@ -86,15 +94,24 @@ def _handle_file(path: Path, client: OpenCTIApiClient) -> None:
         path.unlink(missing_ok=True)
         return
 
-    bundle = build_bundle(events)
+    bundle, built = build_bundle(events)
     if bundle is None:
         logger.warning("Worker: 0 indicators built from %s — deleting", path.name)
         path.unlink(missing_ok=True)
         return
 
     try:
-        built = len(bundle.objects) - 1
-        client.stix2.import_bundle_from_json(bundle.serialize())
+        work_id = helper.api.work.initiate_work(
+            helper.connect_id,
+            f"Botnet IOC ({path.name}, {built} indicators)",
+        )
+        helper.send_stix2_bundle(
+            bundle.serialize(),
+            work_id=work_id,
+            update=True,
+        )
+        message = f"Synced {built} indicators from {path.name}"
+        helper.api.work.to_processed(work_id, message)
         logger.info("Worker: pushed %d indicators from %s", built, path.name)
         path.unlink(missing_ok=True)
         logger.info("Worker: deleted %s", path.name)
@@ -103,17 +120,11 @@ def _handle_file(path: Path, client: OpenCTIApiClient) -> None:
 
 
 
-def _parse_int_env(name: str, default: int) -> int:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        return default
-
-
-_file_queue: queue.Queue = queue.Queue(maxsize=_parse_int_env("QUEUE_MAX_SIZE", 500))
+_file_queue: queue.Queue = queue.Queue(
+    maxsize=int(get_config_variable(
+        "QUEUE_MAX_SIZE", ["http_server", "queue_max_size"], _RAW_CONFIG, default=500
+    ))
+)
 
 
 @dataclass(frozen=True)
@@ -123,35 +134,40 @@ class ServerConfig:
     storage_dir: Path
     watch_dir: Optional[Path]
     max_file_size: int
-    auth_token: Optional[str]
     allowed_extensions: set[str]
 
     @staticmethod
-    def from_env() -> "ServerConfig":
-        default_storage_dir = (Path(__file__).resolve().parents[2] / "data" / "botnet")
-        raw_ext = os.getenv("ALLOWED_EXTENSIONS", "")
+    def from_config() -> "ServerConfig":
+        default_storage_dir = str(Path(__file__).resolve().parents[2] / "data" / "botnet")
+
+        raw_ext = get_config_variable(
+            "ALLOWED_EXTENSIONS", ["http_server", "allowed_extensions"], _RAW_CONFIG, default=""
+        )
         exts = {
             e.strip().lower().lstrip(".")
-            for e in raw_ext.split(",")
+            for e in str(raw_ext).split(",")
             if e.strip()
         }
+
         raw_watch = os.getenv("WATCH_DIR")
+
         return ServerConfig(
-            host=os.getenv("HOST", "0.0.0.0"),
-            port=_parse_int_env("PORT", 8000),
-            storage_dir=Path(os.getenv("STORAGE_DIR", str(default_storage_dir))).resolve(),
+            host=get_config_variable("HOST", ["http_server", "host"], _RAW_CONFIG, default="0.0.0.0"),
+            port=int(get_config_variable("PORT", ["http_server", "port"], _RAW_CONFIG, default=8000)),
+            storage_dir=Path(get_config_variable(
+                "STORAGE_DIR", ["botnet", "storage_dir"], _RAW_CONFIG, default=default_storage_dir
+            )).resolve(),
             watch_dir=Path(raw_watch).resolve() if raw_watch else None,
-            max_file_size=_parse_int_env("MAX_FILE_SIZE", 50 * 1024 * 1024),
-            auth_token=(os.getenv("AUTH_TOKEN") or os.getenv("HTTP_SERVER_API_KEY") or None),
+            max_file_size=int(get_config_variable(
+                "MAX_FILE_SIZE", ["http_server", "max_file_size"], _RAW_CONFIG, default=50 * 1024 * 1024
+            )),
             allowed_extensions=exts,
         )
 
 
-CONFIG = ServerConfig.from_env()
+CONFIG = ServerConfig.from_config()
 
 _safe_name = re.compile(r"[^a-zA-Z0-9._-]+")
-
-_api_key_header = APIKeyHeader(name="X-Api-Key", auto_error=False)
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -173,13 +189,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-async def _check_api_key(api_key: Optional[str] = Security(_api_key_header)) -> None:
-    if not CONFIG.auth_token:
-        return
-    if api_key != CONFIG.auth_token:
-        raise HTTPException(status_code=401, detail="unauthorized")
-
-
 app = FastAPI(
     title="Botnet Upload API",
     description="Upload botnet JSON files to be parsed and pushed to OpenCTI",
@@ -198,7 +207,6 @@ async def get_config():
         "max_file_size": CONFIG.max_file_size,
         "allowed_extensions": sorted(CONFIG.allowed_extensions),
         "storage_dir": str(CONFIG.storage_dir),
-        "auth_enabled": bool(CONFIG.auth_token),
     }
 
 
@@ -206,7 +214,6 @@ async def get_config():
     "/api/v1/files",
     status_code=202,
     tags=["upload"],
-    dependencies=[Security(_check_api_key)],
 )
 async def upload_file(file: UploadFile = File(...)):
     safe_filename = _sanitize_filename(file.filename or "")
@@ -287,11 +294,9 @@ def run() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
 
-    if not _OPENCTI_TOKEN:
-        logger.error(
-            "OPENCTI_TOKEN is not set — add it to .env or set the env var. Exiting."
-        )
-        raise SystemExit(1)
+    # Initialize helper early — registers connector + starts ping alive
+    helper = _get_helper()
+    logger.info("Connector registered with OpenCTI (id=%s)", helper.connect_id)
 
     CONFIG.storage_dir.mkdir(parents=True, exist_ok=True)
 

@@ -1,0 +1,22 @@
+# Botnet IOC Connector — non-sensitive settings only.
+# Secrets (OPENCTI_TOKEN, CONNECTOR_ID, AUTH_TOKEN) come from .env or env vars.
+
+opencti:
+  url: "http://localhost:8080"
+
+connector:
+  type: "EXTERNAL_IMPORT"
+  name: "Botnet IOC"
+  scope: "indicator"
+  log_level: "info"
+  duration_period: "PT5M"
+
+botnet:
+  storage_dir: "/opt/connector/data"
+
+http_server:
+  host: "0.0.0.0"
+  port: 28080
+  max_file_size: 52428800            # 50 MB
+  allowed_extensions: ""             # empty = allow all
+  queue_max_size: 500

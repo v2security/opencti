@@ -12,4 +12,6 @@ COPY config.yml config.yml
 
 WORKDIR /opt/connector/src
 
-ENTRYPOINT ["python", "__main__.py"]
+EXPOSE 28080
+
+ENTRYPOINT ["python", "http_server.py"]

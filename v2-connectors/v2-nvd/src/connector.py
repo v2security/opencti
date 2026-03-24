@@ -16,11 +16,25 @@ import logging
 import os
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from pycti import OpenCTIConnectorHelper
 from stix2 import Bundle
+
+# Load .env from v2-connectors/ (walk up from this file's location)
+def _find_and_load_env() -> None:
+    current = Path(__file__).resolve().parent
+    for _ in range(6):
+        env_file = current / ".env"
+        if env_file.is_file():
+            load_dotenv(env_file, override=False)
+            return
+        current = current.parent
+
+_find_and_load_env()
 
 # Ensure src/ is on path so bare imports work from any working directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -87,6 +101,11 @@ class NvdCveConnector:
                 )
         except Exception:
             self.helper.connector_logger.error("Sync cycle failed")
+
+        self.helper.connector_logger.info(
+            f"Sync cycle finished. Waiting {self.cfg.connector_duration_period} before next run "
+            f"(duration_period={self.cfg.connector_duration_period})"
+        )
 
     # ------------------------------------------------------------------
     # Sync strategies

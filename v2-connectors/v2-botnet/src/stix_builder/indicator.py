@@ -111,7 +111,7 @@ def create_indicator(parsed: dict) -> Indicator | None:
     _dedup_key = event_id or (f"{source_ip}:{timestamp}" if timestamp else f"{source_ip}:{malware_family}" if malware_family else source_ip)
     indicator_id = "indicator--" + str(uuid.uuid5(STIX_NAMESPACE, _dedup_key))
 
-    labels = ["botnet", "V2 Secure"]
+    labels = ["botnet"]
     if malware_family:
         labels.append(malware_family)
 
