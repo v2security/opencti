@@ -10,4 +10,4 @@ COPY config.yml.sample config.yml.sample
 
 WORKDIR /opt/connector/src
 
-ENTRYPOINT ["python", "-m", "__main__"]
+ENTRYPOINT ["python", "__main__.py"]
