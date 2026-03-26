@@ -5,12 +5,16 @@ Custom connector đồng bộ CVE từ NVD API 2.0 vào OpenCTI, bao gồm Vulne
 ## Luồng xử lý
 
 ```
-NVD API 2.0 → fetch CVEs (phân trang, rate-limited)
-    → Parse CVSS v2/v3.1/v4.0 + CWE + CPE
-    → (Optional) Enrich EPSS từ api.first.org
+NVD API 2.0 ──fetch CVEs (phân trang, rate-limited)──→ Parse CVSS v2/v3.1/v4.0 + CWE + CPE
+    → (Optional) Enrich EPSS từ api.first.org (batch 30 CVE/request)
     → Build STIX Bundle: Vulnerability + Software + Relationship(has)
-    → Push vào OpenCTI (upsert)
+    → send_stix2_bundle() ──publish──→ RabbitMQ
+    → OpenCTI worker consume từ queue ──→ import/upsert vào OpenCTI
 ```
+
+**Rate-limit:** 
++ NVD API cho phép 50 req/30s (có key) hoặc 5 req/30s (không key) — client tự sleep 0.6s (có key) / 6s (không) giữa mỗi request.
++ EPSS API gộp tối đa 100 CVE/request (default 30), delay 0.1s giữa các batch; gặp HTTP 429 → retry 3 lần với backoff 10s/20s/30s.
 
 ## 2 chế độ hoạt động
 

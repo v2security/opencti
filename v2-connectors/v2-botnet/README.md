@@ -7,8 +7,10 @@ Custom connector nhận file JSON botnet qua **HTTP API (FastAPI)**, parse thàn
 ```
 POST /api/v1/files (JSON file)
     → Lưu vào storage_dir
-    → Queue cho background worker
-    → Worker: parse_file() → build_bundle() → push STIX bundle lên OpenCTI
+    → Connector daemon poll thư mục mỗi duration_period (default 5 phút)
+    → parse_file() → build_bundle() → STIX Bundle (Indicator × N)
+    → send_stix2_bundle() ──publish──→ RabbitMQ
+    → OpenCTI worker consume từ queue ──→ import vào OpenCTI
     → Xóa file sau khi xử lý xong
 ```
 
