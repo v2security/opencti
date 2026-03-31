@@ -1,5 +1,7 @@
 """STIX2 Relationship builder."""
 
+import json
+
 from stix2 import Relationship, Software, Vulnerability
 
 from stix_builders.vulnerability import get_author
@@ -25,7 +27,8 @@ def create_relationship(
         "allow_custom": True,
     }
     if hardware_cpes:
-        kwargs["description"] = (
-            "Affected only when running on the following hardware:\n" + "\n".join(hardware_cpes)
+        kwargs["description"] = json.dumps(
+            {"vulnerable_when_running_on": hardware_cpes},
+            ensure_ascii=False,
         )
     return Relationship(**kwargs)

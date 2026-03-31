@@ -3,7 +3,7 @@
 Dev helper: run the connector for a single CVE ID or an entire file.
 
 Usage:
-    cd tools/source-nvd-connector/src && conda activate opencti
+    cd v2-connectors/v2-nvd/src && conda activate opencti
     
     # Fetch from NVD API and send to OpenCTI:
     python dev_run.py CVE-2025-15112
@@ -12,16 +12,16 @@ Usage:
     python dev_run.py CVE-2025-15112 --dry-run
 
     # Load from local JSON file instead of NVD API:
-    python dev_run.py CVE-2025-15112 --file ../data/nvd-cve/nvd_cve_20260311.json
+    python dev_run.py CVE-2025-15112 --file ../.data/nvd-cve/nvd_cve_20260311.json
 
     # Combine: local file + dry run:
-    python dev_run.py CVE-2025-15112 --file ../data/nvd-cve/nvd_cve_20260311.json --dry-run
+    python dev_run.py CVE-2025-15112 --file ../.data/nvd-cve/nvd_cve_20260311.json --dry-run
 
     # Process ALL CVEs in a local JSON file (dry run):
-    python dev_run.py --file-all ../data/nvd-cve/nvd_cve_20260311.json --dry-run
+    python dev_run.py --file-all ../../.data/nvd-cve/nvd_cve_20260311.json --dry-run
 
     # Process ALL CVEs in a file and send to OpenCTI:
-    python dev_run.py --file-all ../data/nvd-cve/nvd_cve_20260311.json
+    python dev_run.py --file-all ../../.data/nvd-cve/nvd_cve_20260311.json
 """
 
 from __future__ import annotations
@@ -32,6 +32,18 @@ import logging
 import os
 import sys
 from typing import Any
+
+from dotenv import load_dotenv
+
+# Load .env from v2-connectors root (two levels up from src/)
+_env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".env")
+load_dotenv(_env_path, override=False)
+
+# Map .env names to what pycti expects (like docker-compose does)
+if not os.environ.get("OPENCTI_TOKEN") and os.environ.get("OPENCTI_ADMIN_TOKEN"):
+    os.environ["OPENCTI_TOKEN"] = os.environ["OPENCTI_ADMIN_TOKEN"]
+if not os.environ.get("CONNECTOR_ID") and os.environ.get("CONNECTOR_V2_NVD_ID"):
+    os.environ["CONNECTOR_ID"] = os.environ["CONNECTOR_V2_NVD_ID"]
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -252,7 +264,15 @@ def main():
         helper = None
         if not args.dry_run:
             from pycti import OpenCTIConnectorHelper
-            helper = OpenCTIConnectorHelper(raw_config)
+            raw_config.setdefault("connector", {})["run_and_terminate"] = True
+            _original_excepthook = sys.excepthook
+            try:
+                helper = OpenCTIConnectorHelper(raw_config)
+            except Exception as e:
+                logger.error("Failed to connect to OpenCTI: %s", e)
+                sys.exit(1)
+            finally:
+                sys.excepthook = _original_excepthook
 
         success = 0
         failed = 0
