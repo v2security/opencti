@@ -1,5 +1,10 @@
 # v2-botnet — Botnet IOC Connector
 
+```
+curl -X POST http://localhost:28080/api/v1/files \
+  -F "file=@/workspace/tunv_opencti/v2-connectors/.data/botnet/sample_data.json"
+```
+
 Custom connector nhận file JSON botnet qua **HTTP API (FastAPI)**, parse thành STIX Indicator rồi push vào OpenCTI.
 
 ## Luồng xử lý

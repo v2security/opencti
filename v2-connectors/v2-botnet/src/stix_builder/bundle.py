@@ -6,6 +6,8 @@ import logging
 from stix2 import Bundle
 
 from stix_builder.indicator import create_indicator, get_author
+from stix_builder.observable import create_observable
+from stix_builder.relationship import create_based_on
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +24,12 @@ def build_bundle(events: list[dict], verbose: bool = False) -> tuple[Bundle | No
             logger.warning("Skipped event %s — no source IP", event.get("id"))
             skipped += 1
             continue
+        observable = create_observable(event)
         objects.append(indicator)
+        objects.append(observable)
+        objects.append(create_based_on(indicator, observable))
 
-    built = len(objects) - 1  # first object is always the Identity author
+    built = (len(objects) - 1) // 3  # each event = indicator + observable + relationship
     logger.info("Built %d indicator(s), skipped %d", built, skipped)
 
     if built == 0:

@@ -105,7 +105,7 @@ def create_indicator(parsed: dict) -> Indicator | None:
         except (ValueError, OverflowError):
             pass
 
-    name = f"botnet: {source_ip} ({malware_family})" if malware_family else f"botnet: {source_ip}"
+    name = source_ip
 
     # Use event_id for uniqueness, fall back to timestamp, then ip+family
     _dedup_key = event_id or (f"{source_ip}:{timestamp}" if timestamp else f"{source_ip}:{malware_family}" if malware_family else source_ip)
@@ -113,7 +113,10 @@ def create_indicator(parsed: dict) -> Indicator | None:
 
     labels = ["botnet"]
     if malware_family:
-        labels.append(malware_family)
+        labels.append(f"malware-family:{malware_family}")
+    malware_variant = parsed.get("malware_variant", "")
+    if malware_variant:
+        labels.append(f"malware-variant:{malware_variant}")
 
     ext_refs = []
     if event_id:
