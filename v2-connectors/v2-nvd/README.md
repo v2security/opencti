@@ -1,5 +1,7 @@
 # v2-nvd — NVD CVE Connector
 
+Sample: CVE-2025-60007 (AND - OR)
+
 Custom connector đồng bộ CVE từ NVD API 2.0 vào OpenCTI, bao gồm Vulnerability + Software (CPE) + Relationship + EPSS.
 
 ## Luồng xử lý

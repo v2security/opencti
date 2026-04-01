@@ -24,6 +24,7 @@ def create_relationship(
         "target_ref": vuln.id,
         "created_by_ref": get_author().id,
         "confidence": 100,
+        "labels": ["v2 secure"],
         "allow_custom": True,
     }
     if hardware_cpes:
