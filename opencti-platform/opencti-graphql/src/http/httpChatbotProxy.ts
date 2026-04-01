@@ -1,26 +1,49 @@
-// FORK: Chatbot proxy rewritten to call Claude (Anthropic) API directly
-// instead of proxying to Filigran XTM One Flowise service.
 import type Express from 'express';
 import nconf from 'nconf';
 import { createAuthenticatedContext } from './httpAuthenticatedContext';
 import { logApp } from '../config/conf';
 import { setCookieError } from './httpUtils';
 
-// ---------------------------------------------------------------------------
-// Configuration – set via env vars:
-//   CHATBOT__API_KEY   (required) – your Anthropic API key
-//   CHATBOT__MODEL     (optional) – defaults to claude-sonnet-4-20250514
-//   CHATBOT__MAX_TOKENS (optional) – defaults to 4096
-// ---------------------------------------------------------------------------
-const CHATBOT_API_KEY: string = nconf.get('chatbot:api_key') ?? '';
-const CHATBOT_MODEL: string = nconf.get('chatbot:model') ?? 'claude-sonnet-4-5-20250929';
+type ChatHistoryMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+const CHATBOT_ENABLED: boolean = nconf.get('chatbot:enabled') ?? true;
+const CHATBOT_TYPE: string = (nconf.get('chatbot:type') ?? 'vllm').toLowerCase();
+const CHATBOT_API_KEY: string = nconf.get('chatbot:token') ?? '';
+const CHATBOT_MODEL: string = nconf.get('chatbot:model') ?? 'Qwen/Qwen2.5-32B-Instruct';
+const AI_MODEL: string = nconf.get('ai:model') ?? '';
 const CHATBOT_MAX_TOKENS: number = Number(nconf.get('chatbot:max_tokens') ?? 4096);
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const OPENAI_COMPATIBLE_DEFAULT_API_KEY = 'dummy';
+const SUPPORTED_CHATBOT_TYPES = new Set(['openai', 'vllm']);
 
-// Export for compatibility with settings.js (not actually used since we call Claude directly)
-export const XTM_ONE_CHATBOT_URL = 'anthropic://local'; // Placeholder – chatbot runs locally via Anthropic API
+const RAW_CHATBOT_ENDPOINT: string = nconf.get('chatbot:endpoint') ?? 'http://localhost:8000/v1';
+const NORMALIZED_CHATBOT_ENDPOINT = RAW_CHATBOT_ENDPOINT.replace(/\/+$/, '');
+const OPENAI_BASE_URL = NORMALIZED_CHATBOT_ENDPOINT.endsWith('/v1')
+  ? NORMALIZED_CHATBOT_ENDPOINT
+  : `${NORMALIZED_CHATBOT_ENDPOINT}/v1`;
 
-const SYSTEM_PROMPT = `You are Ariane, an expert AI assistant specialized in Cyber Threat Intelligence (CTI).
+const OPENAI_CHAT_COMPLETIONS_URL = `${OPENAI_BASE_URL}/chat/completions`;
+const CHATBOT_API_KEY_HEADER = CHATBOT_API_KEY || OPENAI_COMPATIBLE_DEFAULT_API_KEY;
+const OPENAI_MODELS_URL = `${OPENAI_BASE_URL}/models`;
+
+let resolvedChatbotModel: string | null = null;
+let resolvingChatbotModelPromise: Promise<string> | null = null;
+
+const getChatbotConfigurationError = () => {
+  if (!CHATBOT_ENABLED) {
+    return 'Chatbot is disabled by configuration.';
+  }
+  if (!SUPPORTED_CHATBOT_TYPES.has(CHATBOT_TYPE)) {
+    return `Unsupported chatbot type "${CHATBOT_TYPE}". Supported types: openai, vllm.`;
+  }
+  return null;
+};
+
+export const XTM_ONE_CHATBOT_URL = OPENAI_BASE_URL;
+
+const SYSTEM_PROMPT = `You are V2-AI, an expert AI assistant specialized in Cyber Threat Intelligence (CTI).
 You run inside an OpenCTI platform instance. Your purpose is to help analysts with:
 - Understanding threat actors, malware, campaigns, and attack patterns
 - Interpreting STIX objects and relationships
@@ -31,14 +54,111 @@ You run inside an OpenCTI platform instance. Your purpose is to help analysts wi
 Be concise, precise, and professional. Use Markdown for formatting when helpful.
 When you don't know something, say so rather than guessing.`;
 
-// Simple in-memory conversation history keyed by chatId (cleared on restart)
-const conversationHistory = new Map<string, Array<{ role: string; content: string }>>();
-const MAX_HISTORY_PER_CHAT = 40; // keep last N messages per chat
-const MAX_CHATS = 500; // evict oldest chats when exceeded
+// Conversation state stays in memory only and is reset when the process restarts.
+const conversationHistory = new Map<string, ChatHistoryMessage[]>();
+const MAX_HISTORY_PER_CHAT = 40;
+const MAX_CHATS = 500;
 
-function getOrCreateHistory(chatId: string): Array<{ role: string; content: string }> {
+const getPreferredChatbotModels = () => {
+  return [CHATBOT_MODEL, AI_MODEL].filter((model): model is string => typeof model === 'string' && model.trim().length > 0);
+};
+
+const fetchAvailableChatbotModels = async () => {
+  const response = await fetch(OPENAI_MODELS_URL, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${CHATBOT_API_KEY_HEADER}`,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Model discovery failed with status ${response.status}: ${body}`);
+  }
+
+  const payload = await response.json() as { data?: Array<{ id?: unknown }> };
+  return Array.isArray(payload?.data)
+    ? payload.data
+      .map((entry) => (typeof entry?.id === 'string' ? entry.id : null))
+      .filter((modelId: string | null): modelId is string => Boolean(modelId))
+    : [];
+};
+
+const resolveChatbotModel = async (forceRefresh = false) => {
+  const configuredModels = getPreferredChatbotModels();
+  const fallbackModel = configuredModels[0] ?? CHATBOT_MODEL;
+
+  if (!forceRefresh && resolvedChatbotModel) {
+    return resolvedChatbotModel;
+  }
+
+  if (!forceRefresh && resolvingChatbotModelPromise) {
+    return resolvingChatbotModelPromise;
+  }
+
+  const resolvePromise = (async () => {
+    try {
+      const availableModels = await fetchAvailableChatbotModels();
+      if (availableModels.length === 0) {
+        return fallbackModel;
+      }
+
+      const matchedModel = configuredModels.find((model) => availableModels.includes(model));
+      if (matchedModel) {
+        return matchedModel;
+      }
+
+      const selectedModel = availableModels[0];
+      logApp.warn('Configured chatbot model is not served by the OpenAI-compatible endpoint, falling back to an available model', {
+        configuredModel: CHATBOT_MODEL,
+        aiModel: AI_MODEL,
+        endpoint: OPENAI_BASE_URL,
+        selectedModel,
+      });
+      return selectedModel;
+    } catch (cause) {
+      logApp.warn('Unable to discover chatbot models from the OpenAI-compatible endpoint, using configured model', {
+        cause,
+        endpoint: OPENAI_BASE_URL,
+        fallbackModel,
+      });
+      return fallbackModel;
+    } finally {
+      resolvingChatbotModelPromise = null;
+    }
+  })();
+
+  resolvingChatbotModelPromise = resolvePromise;
+  resolvedChatbotModel = await resolvePromise;
+  return resolvedChatbotModel;
+};
+
+const executeChatbotRequest = async (body: Record<string, unknown>) => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${CHATBOT_API_KEY_HEADER}`,
+  };
+
+  return fetch(OPENAI_CHAT_COMPLETIONS_URL, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+};
+
+const trimHistory = (history: ChatHistoryMessage[]) => {
+  while (history.length > MAX_HISTORY_PER_CHAT) {
+    history.shift();
+  }
+};
+
+const writeSseEvent = (res: Express.Response, event: string, data?: unknown) => {
+  const payload = data === undefined ? { event } : { event, data };
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+};
+
+function getOrCreateHistory(chatId: string): ChatHistoryMessage[] {
   if (!conversationHistory.has(chatId)) {
-    // Evict oldest if at capacity
     if (conversationHistory.size >= MAX_CHATS) {
       const oldest = conversationHistory.keys().next().value;
       if (oldest) conversationHistory.delete(oldest);
@@ -48,31 +168,33 @@ function getOrCreateHistory(chatId: string): Array<{ role: string; content: stri
   return conversationHistory.get(chatId)!;
 }
 
-// ---------------------------------------------------------------------------
-// GET /chatbot – health check expected by @filigran/chatbot component
-// ---------------------------------------------------------------------------
 export const getChatbotHealthCheck = async (_req: Express.Request, res: Express.Response) => {
-  if (!CHATBOT_API_KEY) {
-    res.status(503).json({ isStreaming: false, error: 'CHATBOT__API_KEY is not configured' });
+  const configurationError = getChatbotConfigurationError();
+  if (configurationError) {
+    res.status(503).json({ isStreaming: false, error: configurationError });
     return;
   }
-  res.json({ isStreaming: true });
+
+  const model = await resolveChatbotModel();
+
+  res.json({
+    isStreaming: true,
+    endpoint: OPENAI_BASE_URL,
+    model,
+  });
 };
 
-// ---------------------------------------------------------------------------
-// POST /chatbot – streaming chat via Claude API
-// ---------------------------------------------------------------------------
 export const getChatbotProxy = async (req: Express.Request, res: Express.Response) => {
   try {
-    // Authenticate the request
-    const context = await createAuthenticatedContext(req, res, 'chatbot');
-    if (!context.user) {
-      res.sendStatus(403);
+    const configurationError = getChatbotConfigurationError();
+    if (configurationError) {
+      res.status(503).json({ error: configurationError });
       return;
     }
 
-    if (!CHATBOT_API_KEY) {
-      res.status(400).json({ error: 'Chatbot is not configured. Set CHATBOT__API_KEY environment variable.' });
+    const context = await createAuthenticatedContext(req, res, 'chatbot');
+    if (!context.user) {
+      res.sendStatus(403);
       return;
     }
 
@@ -84,56 +206,70 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
     const { question, chatId: clientChatId } = req.body;
     const chatId = clientChatId || 'default';
 
-    // Maintain conversation history
     const history = getOrCreateHistory(chatId);
     history.push({ role: 'user', content: question });
+    trimHistory(history);
 
-    // Trim to max history length
-    while (history.length > MAX_HISTORY_PER_CHAT) {
-      history.shift();
-    }
+    let selectedModel = await resolveChatbotModel();
 
-    // Build Claude API request
-    const claudeBody = {
-      model: CHATBOT_MODEL,
+    const openaiBody = {
+      model: selectedModel,
       max_tokens: CHATBOT_MAX_TOKENS,
       stream: true,
-      system: SYSTEM_PROMPT,
-      messages: history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...history.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+      ],
     };
 
-    // Call Anthropic Messages API with streaming
-    const response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': CHATBOT_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(claudeBody),
-    });
+    let response = await executeChatbotRequest(openaiBody);
 
     if (!response.ok) {
-      const errText = await response.text();
-      logApp.error('Claude API error', { status: response.status, body: errText });
-      res.status(502).json({ error: `Claude API returned ${response.status}` });
+      let errText = await response.text();
+      const shouldRetryWithDiscoveredModel = response.status === 404 && errText.includes('does not exist');
+
+      if (shouldRetryWithDiscoveredModel) {
+        const fallbackModel = await resolveChatbotModel(true);
+        if (fallbackModel !== selectedModel) {
+          selectedModel = fallbackModel;
+          response = await executeChatbotRequest({
+            ...openaiBody,
+            model: selectedModel,
+          });
+          if (!response.ok) {
+            errText = await response.text();
+          }
+        }
+      }
+
+      if (!response.ok) {
+      logApp.error('OpenAI-compatible chatbot API error', {
+        status: response.status,
+        body: errText,
+        endpoint: OPENAI_CHAT_COMPLETIONS_URL,
+        model: selectedModel,
+      });
+      res.status(502).json({
+        error: `Chatbot API returned ${response.status}`,
+      });
       return;
+      }
     }
 
-    // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    // Send start event (tells chatbot component to create an empty bot message)
-    res.write(`data: ${JSON.stringify({ event: 'start' })}\n\n`);
+    writeSseEvent(res, 'start');
 
-    // Stream Claude response and translate to chatbot SSE format
     const reader = response.body?.getReader();
     if (!reader) {
-      res.write(`data: ${JSON.stringify({ event: 'error', data: 'No response stream' })}\n\n`);
-      res.write(`data: ${JSON.stringify({ event: 'end' })}\n\n`);
+      writeSseEvent(res, 'error', 'No response stream');
+      writeSseEvent(res, 'end');
       res.end();
       return;
     }
@@ -142,6 +278,29 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
     let fullResponse = '';
     let buffer = '';
 
+    const processSseLine = (line: string) => {
+      if (!line.startsWith('data:')) return;
+
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') return;
+
+      try {
+        const parsed = JSON.parse(data);
+
+        const text =
+          parsed?.choices?.[0]?.delta?.content
+          ?? parsed?.choices?.[0]?.message?.content
+          ?? '';
+
+        if (typeof text === 'string' && text.length > 0) {
+          fullResponse += text;
+          writeSseEvent(res, 'token', text);
+        }
+      } catch {
+        // ignore malformed chunk
+      }
+    };
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -149,42 +308,28 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process complete SSE lines from Claude
         const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // keep incomplete line in buffer
+        buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (!data || data === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(data);
-
-            if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
-              const text = parsed.delta.text;
-              fullResponse += text;
-              // Forward as token event
-              res.write(`data: ${JSON.stringify({ event: 'token', data: text })}\n\n`);
-            }
-            // We ignore other Claude event types (message_start, content_block_start, etc.)
-          } catch {
-            // Skip malformed JSON lines
-          }
+          processSseLine(line);
         }
       }
+
+      if (buffer.trim()) {
+        processSseLine(buffer.trim());
+      }
     } catch (streamErr) {
-      logApp.error('Stream read error from Claude', { cause: streamErr });
+      logApp.error('Stream read error from OpenAI-compatible chatbot API', { cause: streamErr });
     }
 
-    // Save assistant response to history
     if (fullResponse) {
       history.push({ role: 'assistant', content: fullResponse });
+      trimHistory(history);
     }
 
-    // Send metadata + end events
-    res.write(`data: ${JSON.stringify({ event: 'metadata', data: { chatId } })}\n\n`);
-    res.write(`data: ${JSON.stringify({ event: 'end' })}\n\n`);
+    writeSseEvent(res, 'metadata', { chatId, model: selectedModel });
+    writeSseEvent(res, 'end');
     res.end();
 
     req.on('close', () => {
@@ -197,13 +342,15 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
     if (!res.headersSent) {
       res.status(503).send({ status: 503, error: message });
     } else {
-      // Already streaming — send error event and close
       try {
-        res.write(`data: ${JSON.stringify({ event: 'error', data: message })}\n\n`);
-        res.write(`data: ${JSON.stringify({ event: 'end' })}\n\n`);
-      } catch { /* response already closed */ }
+        writeSseEvent(res, 'error', message);
+        writeSseEvent(res, 'end');
+      } catch {
+        // response may already be closed
+      }
       res.end();
     }
+
     setCookieError(res, message);
   }
 };

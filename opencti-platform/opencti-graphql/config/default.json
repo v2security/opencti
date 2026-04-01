@@ -201,10 +201,10 @@
   },
   "ai": {
     "enabled": true,
-    "type": "anthropic",
-    "endpoint": "",
+    "type": "vllm",
+    "endpoint": "http://localhost:8000/v1",
     "token": "",
-    "model": "claude-sonnet-4-5-20250929",
+    "model": "Qwen/Qwen3.5-35B-A3B",
     "version": "",
     "model_images": "",
     "max_tokens": 30000,
@@ -214,8 +214,11 @@
     "timeout": 60000
   },
   "chatbot": {
-    "api_key": "",
-    "model": "claude-sonnet-4-5-20250929",
+    "enabled": true,
+    "type": "vllm",
+    "endpoint": "http://localhost:8000/v1",
+    "token": "",
+    "model": "Qwen/Qwen3.5-35B-A3B",
     "max_tokens": 4096
   },
   "xtm": {
