@@ -307,8 +307,28 @@ services:
       - CONNECTOR_NAME=Botnet IOC (V2Secure)
       - CONNECTOR_SCOPE=indicator
       - CONNECTOR_LOG_LEVEL=info
-      - PORT=${BOTNET_HTTP_PORT}
+      - PORT=20000
       - STORAGE_DIR=${BOTNET_STORAGE_DIR}
+      - AUTH_TOKEN=${BOTNET_HTTP_API_KEY}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:20000/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     volumes:
       - ./.data/botnet:/opt/connector/data
+    restart: always
+
+  reverse-proxy-connectors:
+    image: nginx:1.27-alpine
+    container_name: reverse-proxy-connectors
+    network_mode: host
+    depends_on:
+      connector-v2-botnet:
+        condition: service_healthy
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
     restart: always

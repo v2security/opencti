@@ -12,6 +12,6 @@ COPY config.yml config.yml
 
 WORKDIR /opt/connector/src
 
-EXPOSE 28080
+EXPOSE 20000
 
 ENTRYPOINT ["python", "http_server.py"]

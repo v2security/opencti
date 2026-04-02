@@ -1,9 +1,20 @@
 # v2-botnet — Botnet IOC Connector
 
 ```
-curl -X POST http://localhost:28080/api/v1/files \
-  -F "file=@/workspace/tunv_opencti/v2-connectors/.data/botnet/sample_data.json"
+curl -k -X POST http://localhost:20000/api/v1/files \
+  -H "X-Api-Key: ChangeMe" \
+  -F "file=@/workspace/tunv_opencti/v2-connectors/.data/sample/botnet.json"
+
+curl -k -X POST https://localhost:21000/api/v1/files \
+  -H "X-Api-Key: ChangeMe" \
+  -F "file=@/workspace/tunv_opencti/v2-connectors/.data/sample/botnet.json"
+
+curl -k -X POST https://163.223.58.10:21000/api/v1/files \
+  -H "X-Api-Key: ChangeMe" \
+  -F "file=@/workspace/tunv_opencti/v2-connectors/.data/sample/botnet.json"
 ```
+
+Lưu ý: request này chỉ thành công khi được gửi từ IP đã được allow trong Nginx, hiện tại là `163.223.58.10` và loopback của server (`127.0.0.1`, `::1`).
 
 Custom connector nhận file JSON botnet qua **HTTP API (FastAPI)**, parse thành STIX Indicator rồi push vào OpenCTI.
 
@@ -12,11 +23,12 @@ Custom connector nhận file JSON botnet qua **HTTP API (FastAPI)**, parse thàn
 ```
 POST /api/v1/files (JSON file)
     → Lưu vào storage_dir
-    → Connector daemon poll thư mục mỗi duration_period (default 5 phút)
+  → Worker nền xử lý ngay sau khi file được enqueue
     → parse_file() → build_bundle() → STIX Bundle (Indicator × N)
     → send_stix2_bundle() ──publish──→ RabbitMQ
     → OpenCTI worker consume từ queue ──→ import vào OpenCTI
-    → Xóa file sau khi xử lý xong
+  → Xóa file sau khi xử lý thành công
+  → Nếu push lỗi thì giữ file lại để retry
 ```
 
 ## API Endpoints
@@ -26,7 +38,7 @@ POST /api/v1/files (JSON file)
 | `GET` | `/docs` | Swagger UI |
 | `GET` | `/healthz` | Health check |
 | `GET` | `/api/v1/config` | Xem config hiện tại |
-| `POST` | `/api/v1/files` | Upload JSON file (header `X-Api-Key` nếu bật auth) |
+| `POST` | `/api/v1/files` | Upload JSON file qua HTTPS, yêu cầu header `X-Api-Key` |
 
 ## STIX Output
 
@@ -60,11 +72,20 @@ v2-botnet/
 |----------|---------|-------|
 | `OPENCTI_URL` | `http://localhost:8080` | URL OpenCTI |
 | `OPENCTI_TOKEN` | — | API token (bắt buộc) |
-| `PORT` | `8000` | Port HTTP server |
-| `AUTH_TOKEN` | *(disabled)* | API key cho header `X-Api-Key` |
+| `PORT` | `20000` | Port nội bộ của botnet app (Nginx proxy 21000 → 20000) |
+| `AUTH_TOKEN` | `ChangeMe` | API key cho header `X-Api-Key` |
 | `STORAGE_DIR` | `data/botnet` | Thư mục lưu file tạm |
 | `MAX_FILE_SIZE` | `52428800` (50MB) | Giới hạn upload |
 | `WATCH_DIR` | *(disabled)* | Thư mục watch tự động (dùng watchfiles) |
+
+## Reverse Proxy
+
+- Nginx publish HTTPS tại `https://<host>:21000`
+- Chỉ cho phép IP `163.223.58.10` và loopback của chính server (`127.0.0.1`, `::1`) tại Nginx config
+- Botnet app chỉ chạy nội bộ phía sau Nginx
+- Upload request phải gửi header `X-Api-Key`
+- Vì vậy máy client `163.223.58.10` gọi được, và chính server cũng có thể test qua `https://localhost:21000`; request đó vẫn phải gửi `X-Api-Key`
+- Nếu server dùng self-signed hoặc CA nội bộ, phía client cần trust CA/public certificate đó; nếu server dùng certificate từ CA public thì không cần cung cấp cert riêng cho client
 
 ## Requirements
 

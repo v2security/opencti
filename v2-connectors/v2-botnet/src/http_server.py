@@ -15,7 +15,7 @@ from typing import Optional
 import uvicorn
 import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from pycti import OpenCTIConnectorHelper, get_config_variable
 from watchfiles import watch
 
@@ -143,6 +143,7 @@ class ServerConfig:
     watch_dir: Optional[Path]
     max_file_size: int
     allowed_extensions: set[str]
+    auth_token: str | None
 
     @staticmethod
     def from_config() -> "ServerConfig":
@@ -158,9 +159,15 @@ class ServerConfig:
         }
 
         raw_watch = os.getenv("WATCH_DIR")
+        auth_token = get_config_variable(
+            "AUTH_TOKEN",
+            ["http_server", "auth_token"],
+            _RAW_CONFIG,
+            default="",
+        )
 
         return ServerConfig(
-            host=get_config_variable("HOST", ["http_server", "host"], _RAW_CONFIG, default="0.0.0.0"),
+            host=get_config_variable("HOST", ["http_server", "host"], _RAW_CONFIG, default="127.0.0.1"),
             port=int(get_config_variable("PORT", ["http_server", "port"], _RAW_CONFIG, default=8000)),
             storage_dir=Path(get_config_variable(
                 "STORAGE_DIR", ["botnet", "storage_dir"], _RAW_CONFIG, default=default_storage_dir
@@ -170,6 +177,7 @@ class ServerConfig:
                 "MAX_FILE_SIZE", ["http_server", "max_file_size"], _RAW_CONFIG, default=50 * 1024 * 1024
             )),
             allowed_extensions=exts,
+            auth_token=str(auth_token).strip() or None,
         )
 
 
@@ -195,6 +203,11 @@ def _extension_allowed(filename: str) -> bool:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _enforce_upload_access(x_api_key: str | None) -> None:
+    if CONFIG.auth_token and x_api_key != CONFIG.auth_token:
+        raise HTTPException(status_code=401, detail={"error": "invalid_api_key"})
 
 
 app = FastAPI(
@@ -223,7 +236,12 @@ async def get_config():
     status_code=202,
     tags=["upload"],
 )
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    x_api_key: str | None = Header(default=None, alias="X-Api-Key"),
+):
+    _enforce_upload_access(x_api_key)
+
     safe_filename = _sanitize_filename(file.filename or "")
     if not safe_filename:
         raise HTTPException(status_code=400, detail="missing_or_invalid_filename")
