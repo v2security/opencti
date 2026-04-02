@@ -203,14 +203,24 @@ class NvdCveConnector:
         for cve_data in cve_list:
             cve_id = cve_data.get("id", "unknown")
             try:
-                bundle = self._build_bundle(cve_data, epss_map.get(cve_id))
-                if bundle is None:
+                entities_bundle, rels_bundle = self._build_bundles(
+                    cve_data, epss_map.get(cve_id)
+                )
+                if entities_bundle is None:
                     continue
+                # Send entities (Vulnerability + Software) first
                 self.helper.send_stix2_bundle(
-                    bundle.serialize(),
+                    entities_bundle.serialize(),
                     work_id=work_id,
                     update=True,
                 )
+                # Then send relationships — entities are already queued
+                if rels_bundle is not None:
+                    self.helper.send_stix2_bundle(
+                        rels_bundle.serialize(),
+                        work_id=work_id,
+                        update=True,
+                    )
                 synced += 1
             except Exception:
                 self.helper.connector_logger.error(
@@ -222,32 +232,49 @@ class NvdCveConnector:
         self.helper.connector_logger.info(message)
         return synced
 
-    def _build_bundle(
+    def _build_bundles(
         self, cve_data: dict, epss_data: dict | None
-    ) -> Bundle | None:
-        """Build a STIX2 Bundle from a single CVE entry."""
+    ) -> tuple[Bundle | None, Bundle | None]:
+        """Build STIX2 Bundles from a single CVE entry.
+
+        Returns two bundles to avoid race conditions when workers process
+        objects in parallel:
+          1. Entities bundle (Vulnerability + Software)
+          2. Relationships bundle (Software → Vulnerability)
+
+        The caller must send the entities bundle first so that referenced
+        objects exist (or are queued) before the relationships arrive.
+        """
         if not get_description(cve_data):
             self.helper.connector_logger.debug(
                 f"Skipping {cve_data.get('id')} — no description"
             )
-            return None
+            return None, None
 
         vuln = create_vulnerability(cve_data, epss_data=epss_data)
-        objects: list[Any] = [get_author(), vuln]
+        entities: list[Any] = [get_author(), vuln]
+        relationships: list[Any] = []
 
         for cpe_match in extract_vulnerable_cpes(cve_data):
             sw = create_software(cpe_match)
             rel = create_relationship(
                 sw, vuln, hardware_cpes=cpe_match.get("_hardware_cpes")
             )
-            objects.extend([sw, rel])
+            entities.append(sw)
+            relationships.append(rel)
 
         # Tag vulnerability as having relationships if any software was linked
-        if len(objects) > 2:
+        if relationships:
             vuln = vuln.new_version(labels=list(vuln.get("labels", [])) + ["has-relationships"])
-            objects[1] = vuln
+            entities[1] = vuln
 
-        return Bundle(objects=objects, allow_custom=True)
+        entities_bundle = Bundle(objects=entities, allow_custom=True)
+        rels_bundle = (
+            Bundle(objects=relationships, allow_custom=True)
+            if relationships
+            else None
+        )
+        return entities_bundle, rels_bundle
 
     # ------------------------------------------------------------------
     # Entry point

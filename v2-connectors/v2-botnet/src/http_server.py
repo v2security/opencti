@@ -44,7 +44,7 @@ def _load_config() -> dict:
 _RAW_CONFIG = _load_config()
 
 from parsers.botnet import parse_file
-from stix_builder.bundle import build_bundle
+from stix_builder.bundle import build_bundles
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +94,8 @@ def _handle_file(path: Path, helper: OpenCTIConnectorHelper) -> None:
         path.unlink(missing_ok=True)
         return
 
-    bundle, built = build_bundle(events)
-    if bundle is None:
+    entities_bundle, rels_bundle, built = build_bundles(events)
+    if entities_bundle is None:
         logger.warning("Worker: 0 indicators built from %s — deleting", path.name)
         path.unlink(missing_ok=True)
         return
@@ -105,11 +105,19 @@ def _handle_file(path: Path, helper: OpenCTIConnectorHelper) -> None:
             helper.connect_id,
             f"Botnet IOC ({path.name}, {built} indicators)",
         )
+        # Send entities (Indicators + Observables) first
         helper.send_stix2_bundle(
-            bundle.serialize(),
+            entities_bundle.serialize(),
             work_id=work_id,
             update=True,
         )
+        # Then send relationships — entities are already queued
+        if rels_bundle is not None:
+            helper.send_stix2_bundle(
+                rels_bundle.serialize(),
+                work_id=work_id,
+                update=True,
+            )
         message = f"Synced {built} indicators from {path.name}"
         helper.api.work.to_processed(work_id, message)
         logger.info("Worker: pushed %d indicators from %s", built, path.name)

@@ -25,7 +25,7 @@ def _find_and_load_env() -> None:
 _find_and_load_env()
 
 from parsers.botnet import parse_file
-from stix_builder.bundle import build_bundle
+from stix_builder.bundle import build_bundles
 
 logger = logging.getLogger(__name__)
 
@@ -111,19 +111,27 @@ class BotnetConnector:
             f"Botnet IOC ({json_file.name}, {len(events)} events)",
         )
 
-        bundle, synced = build_bundle(events)
-        if bundle is None:
+        entities_bundle, rels_bundle, synced = build_bundles(events)
+        if entities_bundle is None:
             message = f"Synced 0/{len(events)} indicators from {json_file.name}"
             self.helper.api.work.to_processed(work_id, message)
             self.helper.connector_logger.info(message)
             json_file.unlink(missing_ok=True)
             return
 
+        # Send entities (Indicators + Observables) first
         self.helper.send_stix2_bundle(
-            bundle.serialize(),
+            entities_bundle.serialize(),
             work_id=work_id,
             update=True,
         )
+        # Then send relationships — entities are already queued
+        if rels_bundle is not None:
+            self.helper.send_stix2_bundle(
+                rels_bundle.serialize(),
+                work_id=work_id,
+                update=True,
+            )
 
         message = f"Synced {synced}/{len(events)} indicators from {json_file.name}"
         self.helper.api.work.to_processed(work_id, message)

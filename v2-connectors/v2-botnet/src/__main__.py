@@ -41,7 +41,7 @@ _RAW_CONFIG = _load_config()
 
 from pycti import get_config_variable
 from parsers.botnet import parse_file
-from stix_builder.bundle import build_bundle
+from stix_builder.bundle import build_bundles
 
 logging.basicConfig(
     level=logging.INFO,
@@ -128,13 +128,15 @@ def main():
             logger.warning("No events found in %s — skipping", file_path.name)
             continue
 
-        bundle, synced = build_bundle(events, verbose=args.verbose)
-        if bundle is None:
+        entities_bundle, rels_bundle, synced = build_bundles(events, verbose=args.verbose)
+        if entities_bundle is None:
             logger.warning("No indicators built from %s — skipping", file_path.name)
             continue
 
         if args.dry_run:
-            print(bundle.serialize(pretty=True))
+            print(entities_bundle.serialize(pretty=True))
+            if rels_bundle is not None:
+                print(rels_bundle.serialize(pretty=True))
             logger.info("Dry run — bundle NOT sent to OpenCTI")
         else:
             from pycti import OpenCTIConnectorHelper
@@ -146,10 +148,16 @@ def main():
                 f"Botnet IOC Enrich ({file_path.name}, {len(events)} events)",
             )
             helper.send_stix2_bundle(
-                bundle.serialize(),
+                entities_bundle.serialize(),
                 work_id=work_id,
                 update=True,
             )
+            if rels_bundle is not None:
+                helper.send_stix2_bundle(
+                    rels_bundle.serialize(),
+                    work_id=work_id,
+                    update=True,
+                )
             helper.api.work.to_processed(
                 work_id,
                 f"Synced {synced} indicators from {file_path.name}",

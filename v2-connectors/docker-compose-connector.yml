@@ -14,260 +14,260 @@
 
 services:
 
-  # ###########################
-  # # OPENCTI DEFAULT DATA    #
-  # ###########################
+  ###########################
+  # OPENCTI DEFAULT DATA    #
+  ###########################
 
-  # connector-opencti:
-  #   image: opencti/connector-opencti:${OPENCTI_VERSION}
+  connector-opencti:
+    image: opencti/connector-opencti:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_OPENCTI_ID}
+      - "CONNECTOR_NAME=OpenCTI Datasets"
+      - CONNECTOR_SCOPE=marking-definition,identity,location
+      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT=true
+      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT_CONFIDENCE_LEVEL=100
+    restart: always
+
+  connector-mitre:
+    image: opencti/connector-mitre:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_MITRE_ID}
+      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT=true
+      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT_CONFIDENCE_LEVEL=75
+    restart: always
+
+  ###########################
+  # OPENCTI CONNECTORS      #
+  ###########################
+
+  connector-export-file-stix:
+    image: opencti/connector-export-file-stix:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_STIX_ID}
+      - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
+      - CONNECTOR_NAME=ExportFileStix2
+      - CONNECTOR_SCOPE=application/json
+    restart: always
+
+  connector-export-file-csv:
+    image: opencti/connector-export-file-csv:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_CSV_ID}
+      - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
+      - CONNECTOR_NAME=ExportFileCsv
+      - CONNECTOR_SCOPE=text/csv
+    restart: always
+
+  connector-export-file-txt:
+    image: opencti/connector-export-file-txt:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_TXT_ID}
+      - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
+      - CONNECTOR_NAME=ExportFileTxt
+      - CONNECTOR_SCOPE=text/plain
+    restart: always
+
+  connector-import-file-stix:
+    image: opencti/connector-import-file-stix:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_IMPORT_FILE_STIX_ID}
+      - CONNECTOR_TYPE=INTERNAL_IMPORT_FILE
+      - CONNECTOR_NAME=ImportFileStix
+      - CONNECTOR_VALIDATE_BEFORE_IMPORT=true
+      - CONNECTOR_SCOPE=application/json,text/xml
+      - CONNECTOR_AUTO=true
+    restart: always
+
+  connector-import-document:
+    image: opencti/connector-import-document:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_IMPORT_DOCUMENT_ID}
+      - CONNECTOR_TYPE=INTERNAL_IMPORT_FILE
+      - CONNECTOR_NAME=ImportDocument
+      - CONNECTOR_VALIDATE_BEFORE_IMPORT=true
+      - CONNECTOR_SCOPE=application/pdf,text/plain,text/html
+      - CONNECTOR_AUTO=true
+      - CONNECTOR_ONLY_CONTEXTUAL=false
+      - IMPORT_DOCUMENT_CREATE_INDICATOR=true
+    restart: always
+
+  connector-import-file-yara:
+    image: opencti/connector-import-file-yara:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_IMPORT_FILE_YARA_ID}
+      - CONNECTOR_NAME=ImportFileYARA
+      - CONNECTOR_VALIDATE_BEFORE_IMPORT=true
+      - CONNECTOR_SCOPE=text/yara+plain
+      - CONNECTOR_AUTO=false
+      - YARA_IMPORT_FILE_SPLIT_RULES=true
+    restart: always
+
+  connector-analysis:
+    image: opencti/connector-import-document:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_ANALYSIS_ID}
+      - CONNECTOR_TYPE=INTERNAL_ANALYSIS
+      - CONNECTOR_NAME=ImportDocumentAnalysis
+      - CONNECTOR_VALIDATE_BEFORE_IMPORT=false
+      - CONNECTOR_SCOPE=application/pdf,text/plain,text/html
+      - CONNECTOR_AUTO=true
+      - CONNECTOR_ONLY_CONTEXTUAL=false
+    restart: always
+
+  connector-import-external-reference:
+    image: opencti/connector-import-external-reference:${OPENCTI_VERSION}
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_IMPORT_EXTERNAL_REFERENCE_ID}
+      - CONNECTOR_NAME=ImportExternalReference
+    restart: always
+
+  ###########################
+  # OPENCTI ADDITIONAL      #
+  ###########################
+
+  connector-alienvault:
+    image: opencti/connector-alienvault:${OPENCTI_VERSION}
+    container_name: connector-alienvault
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_OTX_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=AlienVault OTX
+      - CONNECTOR_SCOPE=alienvault
+      - CONNECTOR_LOG_LEVEL=info
+      - ALIENVAULT_BASE_URL=https://otx.alienvault.com
+      - ALIENVAULT_API_KEY=${OTX_API_KEY}
+      - ALIENVAULT_TLP=White
+      - ALIENVAULT_CREATE_OBSERVABLES=true
+      - ALIENVAULT_CREATE_INDICATORS=true
+      - ALIENVAULT_ENABLE_RELATIONSHIPS=true
+      - ALIENVAULT_ENABLE_ATTACK_PATTERNS_INDICATES=true
+      - ALIENVAULT_DEFAULT_X_OPENCTI_SCORE=50
+    restart: always
+
+  # connector-cve:
+  #   image: opencti/connector-cve:${OPENCTI_VERSION}
+  #   container_name: connector-cve
   #   network_mode: host
   #   environment:
   #     - OPENCTI_URL=http://localhost:8080
   #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_OPENCTI_ID}
-  #     - "CONNECTOR_NAME=OpenCTI Datasets"
-  #     - CONNECTOR_SCOPE=marking-definition,identity,location
-  #     - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT=true
-  #     - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT_CONFIDENCE_LEVEL=100
-  #   restart: always
-
-  # connector-mitre:
-  #   image: opencti/connector-mitre:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_MITRE_ID}
-  #     - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT=true
-  #     - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT_CONFIDENCE_LEVEL=75
-  #   restart: always
-
-  # ###########################
-  # # OPENCTI CONNECTORS      #
-  # ###########################
-
-  # connector-export-file-stix:
-  #   image: opencti/connector-export-file-stix:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_STIX_ID}
-  #     - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
-  #     - CONNECTOR_NAME=ExportFileStix2
-  #     - CONNECTOR_SCOPE=application/json
-  #   restart: always
-
-  # connector-export-file-csv:
-  #   image: opencti/connector-export-file-csv:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_CSV_ID}
-  #     - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
-  #     - CONNECTOR_NAME=ExportFileCsv
-  #     - CONNECTOR_SCOPE=text/csv
-  #   restart: always
-
-  # connector-export-file-txt:
-  #   image: opencti/connector-export-file-txt:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_EXPORT_FILE_TXT_ID}
-  #     - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
-  #     - CONNECTOR_NAME=ExportFileTxt
-  #     - CONNECTOR_SCOPE=text/plain
-  #   restart: always
-
-  # connector-import-file-stix:
-  #   image: opencti/connector-import-file-stix:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_IMPORT_FILE_STIX_ID}
-  #     - CONNECTOR_TYPE=INTERNAL_IMPORT_FILE
-  #     - CONNECTOR_NAME=ImportFileStix
-  #     - CONNECTOR_VALIDATE_BEFORE_IMPORT=true
-  #     - CONNECTOR_SCOPE=application/json,text/xml
-  #     - CONNECTOR_AUTO=true
-  #   restart: always
-
-  # connector-import-document:
-  #   image: opencti/connector-import-document:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_IMPORT_DOCUMENT_ID}
-  #     - CONNECTOR_TYPE=INTERNAL_IMPORT_FILE
-  #     - CONNECTOR_NAME=ImportDocument
-  #     - CONNECTOR_VALIDATE_BEFORE_IMPORT=true
-  #     - CONNECTOR_SCOPE=application/pdf,text/plain,text/html
-  #     - CONNECTOR_AUTO=true
-  #     - CONNECTOR_ONLY_CONTEXTUAL=false
-  #     - IMPORT_DOCUMENT_CREATE_INDICATOR=true
-  #   restart: always
-
-  # connector-import-file-yara:
-  #   image: opencti/connector-import-file-yara:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_IMPORT_FILE_YARA_ID}
-  #     - CONNECTOR_NAME=ImportFileYARA
-  #     - CONNECTOR_VALIDATE_BEFORE_IMPORT=true
-  #     - CONNECTOR_SCOPE=text/yara+plain
-  #     - CONNECTOR_AUTO=false
-  #     - YARA_IMPORT_FILE_SPLIT_RULES=true
-  #   restart: always
-
-  # connector-analysis:
-  #   image: opencti/connector-import-document:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_ANALYSIS_ID}
-  #     - CONNECTOR_TYPE=INTERNAL_ANALYSIS
-  #     - CONNECTOR_NAME=ImportDocumentAnalysis
-  #     - CONNECTOR_VALIDATE_BEFORE_IMPORT=false
-  #     - CONNECTOR_SCOPE=application/pdf,text/plain,text/html
-  #     - CONNECTOR_AUTO=true
-  #     - CONNECTOR_ONLY_CONTEXTUAL=false
-  #   restart: always
-
-  # connector-import-external-reference:
-  #   image: opencti/connector-import-external-reference:${OPENCTI_VERSION}
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_IMPORT_EXTERNAL_REFERENCE_ID}
-  #     - CONNECTOR_NAME=ImportExternalReference
-  #   restart: always
-
-  # ###########################
-  # # OPENCTI ADDITIONAL      #
-  # ###########################
-
-  # connector-alienvault:
-  #   image: opencti/connector-alienvault:${OPENCTI_VERSION}
-  #   container_name: connector-alienvault
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_OTX_ID}
+  #     - CONNECTOR_ID=${CONNECTOR_CVE_ID}
   #     - CONNECTOR_TYPE=EXTERNAL_IMPORT
-  #     - CONNECTOR_NAME=AlienVault OTX
-  #     - CONNECTOR_SCOPE=alienvault
+  #     - CONNECTOR_NAME=NVD CVE
+  #     - CONNECTOR_SCOPE=cve
   #     - CONNECTOR_LOG_LEVEL=info
-  #     - ALIENVAULT_BASE_URL=https://otx.alienvault.com
-  #     - ALIENVAULT_API_KEY=${OTX_API_KEY}
-  #     - ALIENVAULT_TLP=White
-  #     - ALIENVAULT_CREATE_OBSERVABLES=true
-  #     - ALIENVAULT_CREATE_INDICATORS=true
-  #     - ALIENVAULT_ENABLE_RELATIONSHIPS=true
-  #     - ALIENVAULT_ENABLE_ATTACK_PATTERNS_INDICATES=true
-  #     - ALIENVAULT_DEFAULT_X_OPENCTI_SCORE=50
+  #     - CONNECTOR_DURATION_PERIOD=PT1H
+  #     - CVE_API_KEY=${NVD_API_KEY}
+  #     - CVE_START_YEAR=2024
   #   restart: always
 
-  # # connector-cve:
-  # #   image: opencti/connector-cve:${OPENCTI_VERSION}
-  # #   container_name: connector-cve
-  # #   network_mode: host
-  # #   environment:
-  # #     - OPENCTI_URL=http://localhost:8080
-  # #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  # #     - CONNECTOR_ID=${CONNECTOR_CVE_ID}
-  # #     - CONNECTOR_TYPE=EXTERNAL_IMPORT
-  # #     - CONNECTOR_NAME=NVD CVE
-  # #     - CONNECTOR_SCOPE=cve
-  # #     - CONNECTOR_LOG_LEVEL=info
-  # #     - CONNECTOR_DURATION_PERIOD=PT1H
-  # #     - CVE_API_KEY=${NVD_API_KEY}
-  # #     - CVE_START_YEAR=2024
-  # #   restart: always
-
-  # # connector-cpe:
-  # #   image: opencti/connector-cpe:${OPENCTI_VERSION}
-  # #   container_name: connector-cpe
-  # #   network_mode: host
-  # #   environment:
-  # #     - OPENCTI_URL=http://localhost:8080
-  # #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  # #     - CONNECTOR_ID=${CONNECTOR_CPE_ID}
-  # #     - CONNECTOR_TYPE=EXTERNAL_IMPORT
-  # #     - CONNECTOR_NAME=Common Platform Enumeration
-  # #     - CONNECTOR_SCOPE=software
-  # #     - CONNECTOR_LOG_LEVEL=info
-  # #     - CONNECTOR_DURATION_PERIOD=PT6H
-  # #     - CPE_BASE_URL=https://services.nvd.nist.gov/rest/json/cpes/2.0
-  # #     - CPE_API_KEY=${NVD_API_KEY}
-  # #   restart: always
-
-  # connector-shodan:
-  #   image: opencti/connector-shodan:${OPENCTI_VERSION}
-  #   container_name: connector-shodan
+  # connector-cpe:
+  #   image: opencti/connector-cpe:${OPENCTI_VERSION}
+  #   container_name: connector-cpe
   #   network_mode: host
   #   environment:
   #     - OPENCTI_URL=http://localhost:8080
   #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_SHODAN_ID}
-  #     - CONNECTOR_TYPE=INTERNAL_ENRICHMENT
-  #     - CONNECTOR_NAME=Shodan
-  #     - CONNECTOR_SCOPE=ipv4-addr
-  #     - CONNECTOR_LOG_LEVEL=info
-  #     - SHODAN_TOKEN=${SHODAN_API_KEY}
-  #   restart: always
-
-  # connector-misp-feed:
-  #   image: opencti/connector-misp-feed:${OPENCTI_VERSION}
-  #   container_name: connector-misp-feed
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=misp-feed
+  #     - CONNECTOR_ID=${CONNECTOR_CPE_ID}
   #     - CONNECTOR_TYPE=EXTERNAL_IMPORT
-  #     - CONNECTOR_NAME=MISP OSINT Feed
-  #     - CONNECTOR_SCOPE=misp-feed
+  #     - CONNECTOR_NAME=Common Platform Enumeration
+  #     - CONNECTOR_SCOPE=software
   #     - CONNECTOR_LOG_LEVEL=info
-  #     - MISP_FEED_URL=https://www.circl.lu/doc/misp/feed-osint
-  #     - MISP_FEED_SSL_VERIFY=true
-  #     - MISP_FEED_IMPORT_FROM_DATE=2024-01-01
-  #     - MISP_FEED_CREATE_REPORTS=true
-  #     - MISP_FEED_REPORT_TYPE=misp-event
-  #     - MISP_FEED_CREATE_INDICATORS=true
-  #     - MISP_FEED_CREATE_OBSERVABLES=true
-  #     - MISP_FEED_CREATE_OBJECT_OBSERVABLES=true
-  #     - MISP_FEED_IMPORT_WITH_ATTACHMENTS=true
-  #     - MISP_FEED_IMPORT_UNSUPPORTED_OBSERVABLES_AS_TEXT=false
-  #     - CONNECTOR_DURATION_PERIOD=1d
+  #     - CONNECTOR_DURATION_PERIOD=PT6H
+  #     - CPE_BASE_URL=https://services.nvd.nist.gov/rest/json/cpes/2.0
+  #     - CPE_API_KEY=${NVD_API_KEY}
   #   restart: always
 
-  # connector-socradar:
-  #   image: opencti/connector-socradar:${OPENCTI_VERSION}
-  #   container_name: connector-socradar
-  #   network_mode: host
-  #   environment:
-  #     - OPENCTI_URL=http://localhost:8080
-  #     - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
-  #     - CONNECTOR_ID=${CONNECTOR_SOCRADAR_ID}
-  #     - CONNECTOR_TYPE=EXTERNAL_IMPORT
-  #     - CONNECTOR_NAME=SOCRadar
-  #     - CONNECTOR_SCOPE=socradar
-  #     - CONNECTOR_LOG_LEVEL=info
-  #     - CONNECTOR_DURATION_PERIOD=PT10M
-  #     - RADAR_BASE_FEED_URL=https://platform.socradar.com/api/threat/intelligence/feed_list/
-  #     - RADAR_SOCRADAR_KEY=${SOCRADAR_API_KEY}
-  #     - 'RADAR_FEED_LISTS=${SOCRADAR_FEED_LISTS}'
-  #   restart: always
+  connector-shodan:
+    image: opencti/connector-shodan:${OPENCTI_VERSION}
+    container_name: connector-shodan
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_SHODAN_ID}
+      - CONNECTOR_TYPE=INTERNAL_ENRICHMENT
+      - CONNECTOR_NAME=Shodan
+      - CONNECTOR_SCOPE=ipv4-addr
+      - CONNECTOR_LOG_LEVEL=info
+      - SHODAN_TOKEN=${SHODAN_API_KEY}
+    restart: always
+
+  connector-misp-feed:
+    image: opencti/connector-misp-feed:${OPENCTI_VERSION}
+    container_name: connector-misp-feed
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=misp-feed
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=MISP OSINT Feed
+      - CONNECTOR_SCOPE=misp-feed
+      - CONNECTOR_LOG_LEVEL=info
+      - MISP_FEED_URL=https://www.circl.lu/doc/misp/feed-osint
+      - MISP_FEED_SSL_VERIFY=true
+      - MISP_FEED_IMPORT_FROM_DATE=2024-01-01
+      - MISP_FEED_CREATE_REPORTS=true
+      - MISP_FEED_REPORT_TYPE=misp-event
+      - MISP_FEED_CREATE_INDICATORS=true
+      - MISP_FEED_CREATE_OBSERVABLES=true
+      - MISP_FEED_CREATE_OBJECT_OBSERVABLES=true
+      - MISP_FEED_IMPORT_WITH_ATTACHMENTS=true
+      - MISP_FEED_IMPORT_UNSUPPORTED_OBSERVABLES_AS_TEXT=false
+      - CONNECTOR_DURATION_PERIOD=1d
+    restart: always
+
+  connector-socradar:
+    image: opencti/connector-socradar:${OPENCTI_VERSION}
+    container_name: connector-socradar
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_SOCRADAR_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=SOCRadar
+      - CONNECTOR_SCOPE=socradar
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=PT10M
+      - RADAR_BASE_FEED_URL=https://platform.socradar.com/api/threat/intelligence/feed_list/
+      - RADAR_SOCRADAR_KEY=${SOCRADAR_API_KEY}
+      - 'RADAR_FEED_LISTS=${SOCRADAR_FEED_LISTS}'
+    restart: always
 
   ###########################
   # CUSTOM CONNECTORS       #
@@ -310,5 +310,5 @@ services:
       - PORT=${BOTNET_HTTP_PORT}
       - STORAGE_DIR=${BOTNET_STORAGE_DIR}
     volumes:
-      - ./data/botnet:/opt/connector/data
+      - ./.data/botnet:/opt/connector/data
     restart: always

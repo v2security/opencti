@@ -12,9 +12,17 @@ from stix_builder.relationship import create_based_on
 logger = logging.getLogger(__name__)
 
 
-def build_bundle(events: list[dict], verbose: bool = False) -> tuple[Bundle | None, int]:
-    """Return (bundle, indicator_count). Bundle is None when no indicators were built."""
-    objects = [get_author()]
+def build_bundles(
+    events: list[dict], verbose: bool = False
+) -> tuple[Bundle | None, Bundle | None, int]:
+    """Return (entities_bundle, relationships_bundle, indicator_count).
+
+    Entities (Indicators + Observables) and Relationships are split into
+    separate bundles so the caller can send entities first, avoiding race
+    conditions when multiple workers process objects in parallel.
+    """
+    entities = [get_author()]
+    relationships = []
     skipped = 0
     for event in events:
         if verbose:
@@ -25,13 +33,16 @@ def build_bundle(events: list[dict], verbose: bool = False) -> tuple[Bundle | No
             skipped += 1
             continue
         observable = create_observable(event)
-        objects.append(indicator)
-        objects.append(observable)
-        objects.append(create_based_on(indicator, observable))
+        entities.append(indicator)
+        entities.append(observable)
+        relationships.append(create_based_on(indicator, observable))
 
-    built = (len(objects) - 1) // 3  # each event = indicator + observable + relationship
+    built = len(relationships)
     logger.info("Built %d indicator(s), skipped %d", built, skipped)
 
     if built == 0:
-        return None, 0
-    return Bundle(objects=objects, allow_custom=True), built
+        return None, None, 0
+
+    entities_bundle = Bundle(objects=entities, allow_custom=True)
+    rels_bundle = Bundle(objects=relationships, allow_custom=True)
+    return entities_bundle, rels_bundle, built
