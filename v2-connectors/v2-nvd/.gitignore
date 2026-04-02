@@ -1,5 +1,0 @@
-.sample/
-build/
-dist/
-*.spec
-config.yml
