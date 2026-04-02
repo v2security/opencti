@@ -416,7 +416,7 @@ export const generateNLQresponse = async (context: AuthContext, user: AuthUser, 
   const promptValue = await NLQPromptTemplate.formatPromptValue({ text: search });
 
   // 01. query the model
-  logApp.debug('[AI] Querying NLQ with prompt', { questionStart: search.substring(0, 100) });
+  logApp.info('[AI-NLQ] Querying prompt', { questionStart: search.substring(0, 100) });
   const NLQ_TIMEOUT = nconf.get('app:ai:timeout') || 60000;
   let rawResponse;
   try {

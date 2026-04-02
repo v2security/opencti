@@ -3,40 +3,53 @@ import nconf from 'nconf';
 import { createAuthenticatedContext } from './httpAuthenticatedContext';
 import { logApp } from '../config/conf';
 import { setCookieError } from './httpUtils';
+import { isEmptyField } from '../database/utils';
 
 type ChatHistoryMessage = {
   role: 'user' | 'assistant';
   content: string;
 };
 
-const CHATBOT_ENABLED: boolean = nconf.get('chatbot:enabled') ?? true;
-const CHATBOT_TYPE: string = (nconf.get('chatbot:type') ?? 'vllm').toLowerCase();
-const CHATBOT_API_KEY: string = nconf.get('chatbot:token') ?? '';
-const CHATBOT_MODEL: string = nconf.get('chatbot:model') ?? 'Qwen/Qwen2.5-32B-Instruct';
-const AI_MODEL: string = nconf.get('ai:model') ?? '';
-const CHATBOT_MAX_TOKENS: number = Number(nconf.get('chatbot:max_tokens') ?? 4096);
-const OPENAI_COMPATIBLE_DEFAULT_API_KEY = 'dummy';
-const SUPPORTED_CHATBOT_TYPES = new Set(['openai', 'vllm']);
+const CHATBOT_CONFIG = {
+  enabled: nconf.get('chatbot:enabled') ?? true,
+  type: `${nconf.get('chatbot:type') ?? ''}`.toLowerCase(),
+  endpoint: nconf.get('chatbot:endpoint') ?? '',
+  token: nconf.get('chatbot:token') ?? '',
+  model: nconf.get('chatbot:model') ?? '',
+  aiModel: nconf.get('ai:model') ?? '',
+  maxTokens: Number(nconf.get('chatbot:max_tokens') ?? 4096),
+};
+const SUPPORTED_CHATBOT_TYPES = new Set(['openai']);
 
-const RAW_CHATBOT_ENDPOINT: string = nconf.get('chatbot:endpoint') ?? 'http://localhost:8000/v1';
-const NORMALIZED_CHATBOT_ENDPOINT = RAW_CHATBOT_ENDPOINT.replace(/\/+$/, '');
-const OPENAI_BASE_URL = NORMALIZED_CHATBOT_ENDPOINT.endsWith('/v1')
-  ? NORMALIZED_CHATBOT_ENDPOINT
-  : `${NORMALIZED_CHATBOT_ENDPOINT}/v1`;
+const toOpenAiBaseUrl = (endpoint: string) => {
+  const normalizedEndpoint = endpoint.replace(/\/+$/, '');
+  return normalizedEndpoint.endsWith('/v1')
+    ? normalizedEndpoint
+    : `${normalizedEndpoint}/v1`;
+};
+
+const OPENAI_BASE_URL = isEmptyField(CHATBOT_CONFIG.endpoint)
+  ? ''
+  : toOpenAiBaseUrl(CHATBOT_CONFIG.endpoint);
 
 const OPENAI_CHAT_COMPLETIONS_URL = `${OPENAI_BASE_URL}/chat/completions`;
-const CHATBOT_API_KEY_HEADER = CHATBOT_API_KEY || OPENAI_COMPATIBLE_DEFAULT_API_KEY;
 const OPENAI_MODELS_URL = `${OPENAI_BASE_URL}/models`;
 
 let resolvedChatbotModel: string | null = null;
 let resolvingChatbotModelPromise: Promise<string> | null = null;
 
-const getChatbotConfigurationError = () => {
-  if (!CHATBOT_ENABLED) {
+const getChatbotConfigError = () => {
+  if (!CHATBOT_CONFIG.enabled) {
     return 'Chatbot is disabled by configuration.';
   }
-  if (!SUPPORTED_CHATBOT_TYPES.has(CHATBOT_TYPE)) {
-    return `Unsupported chatbot type "${CHATBOT_TYPE}". Supported types: openai, vllm.`;
+  if (!SUPPORTED_CHATBOT_TYPES.has(CHATBOT_CONFIG.type)) {
+    return `Unsupported chatbot type "${CHATBOT_CONFIG.type}". Supported types: openai.`;
+  }
+  if (isEmptyField(CHATBOT_CONFIG.endpoint)) {
+    return 'Chatbot endpoint is not configured.';
+  }
+  if (isEmptyField(CHATBOT_CONFIG.token)) {
+    return 'Chatbot token is not configured.';
   }
   return null;
 };
@@ -59,16 +72,18 @@ const conversationHistory = new Map<string, ChatHistoryMessage[]>();
 const MAX_HISTORY_PER_CHAT = 40;
 const MAX_CHATS = 500;
 
-const getPreferredChatbotModels = () => {
-  return [CHATBOT_MODEL, AI_MODEL].filter((model): model is string => typeof model === 'string' && model.trim().length > 0);
-};
+const getPreferredModels = () => [CHATBOT_CONFIG.model, CHATBOT_CONFIG.aiModel]
+  .filter((model): model is string => typeof model === 'string' && model.trim().length > 0);
 
-const fetchAvailableChatbotModels = async () => {
+const getAuthHeaders = () => ({
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${CHATBOT_CONFIG.token}`,
+});
+
+const fetchModels = async () => {
   const response = await fetch(OPENAI_MODELS_URL, {
     method: 'GET',
-    headers: {
-      Authorization: `Bearer ${CHATBOT_API_KEY_HEADER}`,
-    },
+    headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
@@ -84,9 +99,9 @@ const fetchAvailableChatbotModels = async () => {
     : [];
 };
 
-const resolveChatbotModel = async (forceRefresh = false) => {
-  const configuredModels = getPreferredChatbotModels();
-  const fallbackModel = configuredModels[0] ?? CHATBOT_MODEL;
+const resolveModel = async (forceRefresh = false) => {
+  const preferredModels = getPreferredModels();
+  const fallbackModel = preferredModels[0] ?? CHATBOT_CONFIG.model;
 
   if (!forceRefresh && resolvedChatbotModel) {
     return resolvedChatbotModel;
@@ -98,20 +113,20 @@ const resolveChatbotModel = async (forceRefresh = false) => {
 
   const resolvePromise = (async () => {
     try {
-      const availableModels = await fetchAvailableChatbotModels();
+      const availableModels = await fetchModels();
       if (availableModels.length === 0) {
         return fallbackModel;
       }
 
-      const matchedModel = configuredModels.find((model) => availableModels.includes(model));
+      const matchedModel = preferredModels.find((model) => availableModels.includes(model));
       if (matchedModel) {
         return matchedModel;
       }
 
       const selectedModel = availableModels[0];
       logApp.warn('Configured chatbot model is not served by the OpenAI-compatible endpoint, falling back to an available model', {
-        configuredModel: CHATBOT_MODEL,
-        aiModel: AI_MODEL,
+        configuredModel: CHATBOT_CONFIG.model,
+        aiModel: CHATBOT_CONFIG.aiModel,
         endpoint: OPENAI_BASE_URL,
         selectedModel,
       });
@@ -133,18 +148,26 @@ const resolveChatbotModel = async (forceRefresh = false) => {
   return resolvedChatbotModel;
 };
 
-const executeChatbotRequest = async (body: Record<string, unknown>) => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${CHATBOT_API_KEY_HEADER}`,
-  };
-
+const requestChatCompletion = async (body: Record<string, unknown>) => {
   return fetch(OPENAI_CHAT_COMPLETIONS_URL, {
     method: 'POST',
-    headers,
+    headers: getAuthHeaders(),
     body: JSON.stringify(body),
   });
 };
+
+const buildChatBody = (model: string, history: ChatHistoryMessage[]) => ({
+  model,
+  max_tokens: CHATBOT_CONFIG.maxTokens,
+  stream: true,
+  messages: [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...history.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+  ],
+});
 
 const trimHistory = (history: ChatHistoryMessage[]) => {
   while (history.length > MAX_HISTORY_PER_CHAT) {
@@ -169,13 +192,13 @@ function getOrCreateHistory(chatId: string): ChatHistoryMessage[] {
 }
 
 export const getChatbotHealthCheck = async (_req: Express.Request, res: Express.Response) => {
-  const configurationError = getChatbotConfigurationError();
+  const configurationError = getChatbotConfigError();
   if (configurationError) {
     res.status(503).json({ isStreaming: false, error: configurationError });
     return;
   }
 
-  const model = await resolveChatbotModel();
+  const model = await resolveModel();
 
   res.json({
     isStreaming: true,
@@ -186,7 +209,7 @@ export const getChatbotHealthCheck = async (_req: Express.Request, res: Express.
 
 export const getChatbotProxy = async (req: Express.Request, res: Express.Response) => {
   try {
-    const configurationError = getChatbotConfigurationError();
+    const configurationError = getChatbotConfigError();
     if (configurationError) {
       res.status(503).json({ error: configurationError });
       return;
@@ -210,35 +233,20 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
     history.push({ role: 'user', content: question });
     trimHistory(history);
 
-    let selectedModel = await resolveChatbotModel();
-
-    const openaiBody = {
-      model: selectedModel,
-      max_tokens: CHATBOT_MAX_TOKENS,
-      stream: true,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        ...history.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-      ],
-    };
-
-    let response = await executeChatbotRequest(openaiBody);
+    let selectedModel = await resolveModel();
+    const requestBody = buildChatBody(selectedModel, history);
+    logApp.info('[AI-ChatBOT] Sending request to AI', { model: selectedModel, endpoint: OPENAI_BASE_URL, historySize: history.length });
+    let response = await requestChatCompletion(requestBody);
 
     if (!response.ok) {
       let errText = await response.text();
       const shouldRetryWithDiscoveredModel = response.status === 404 && errText.includes('does not exist');
 
       if (shouldRetryWithDiscoveredModel) {
-        const fallbackModel = await resolveChatbotModel(true);
+        const fallbackModel = await resolveModel(true);
         if (fallbackModel !== selectedModel) {
           selectedModel = fallbackModel;
-          response = await executeChatbotRequest({
-            ...openaiBody,
-            model: selectedModel,
-          });
+          response = await requestChatCompletion(buildChatBody(selectedModel, history));
           if (!response.ok) {
             errText = await response.text();
           }
@@ -246,16 +254,16 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
       }
 
       if (!response.ok) {
-      logApp.error('OpenAI-compatible chatbot API error', {
-        status: response.status,
-        body: errText,
-        endpoint: OPENAI_CHAT_COMPLETIONS_URL,
-        model: selectedModel,
-      });
-      res.status(502).json({
-        error: `Chatbot API returned ${response.status}`,
-      });
-      return;
+        logApp.error('[AI-ChatBOT] OpenAI-compatible API error', {
+          status: response.status,
+          body: errText,
+          endpoint: OPENAI_CHAT_COMPLETIONS_URL,
+          model: selectedModel,
+        });
+        res.status(502).json({
+          error: `Chatbot API returned ${response.status}`,
+        });
+        return;
       }
     }
 
@@ -274,32 +282,42 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
       return;
     }
 
-    const decoder = new TextDecoder();
-    let fullResponse = '';
-    let buffer = '';
+    const readChunkText = (payload: unknown) => {
+      if (typeof payload !== 'object' || payload === null) {
+        return '';
+      }
+      const parsed = payload as {
+        choices?: Array<{
+          delta?: { content?: string };
+          message?: { content?: string };
+        }>;
+      };
 
-    const processSseLine = (line: string) => {
+      return parsed.choices?.[0]?.delta?.content
+        ?? parsed.choices?.[0]?.message?.content
+        ?? '';
+    };
+
+    const pushSseLine = (line: string, fullText: { value: string }) => {
       if (!line.startsWith('data:')) return;
 
       const data = line.slice(5).trim();
       if (!data || data === '[DONE]') return;
 
       try {
-        const parsed = JSON.parse(data);
+        const text = readChunkText(JSON.parse(data));
+        if (typeof text !== 'string' || text.length === 0) return;
 
-        const text =
-          parsed?.choices?.[0]?.delta?.content
-          ?? parsed?.choices?.[0]?.message?.content
-          ?? '';
-
-        if (typeof text === 'string' && text.length > 0) {
-          fullResponse += text;
-          writeSseEvent(res, 'token', text);
-        }
+        fullText.value += text;
+        writeSseEvent(res, 'token', text);
       } catch {
         // ignore malformed chunk
       }
     };
+
+    const decoder = new TextDecoder();
+    const fullResponse = { value: '' };
+    let buffer = '';
 
     try {
       while (true) {
@@ -312,20 +330,23 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          processSseLine(line);
+          pushSseLine(line, fullResponse);
         }
       }
 
       if (buffer.trim()) {
-        processSseLine(buffer.trim());
+        pushSseLine(buffer.trim(), fullResponse);
       }
     } catch (streamErr) {
-      logApp.error('Stream read error from OpenAI-compatible chatbot API', { cause: streamErr });
+      logApp.error('[AI-ChatBOT] Stream read error from OpenAI-compatible API', { cause: streamErr });
     }
 
-    if (fullResponse) {
-      history.push({ role: 'assistant', content: fullResponse });
+    if (fullResponse.value) {
+      logApp.info('[AI-ChatBOT] AI response received', { model: selectedModel, responseLength: fullResponse.value.length });
+      history.push({ role: 'assistant', content: fullResponse.value });
       trimHistory(history);
+    } else {
+      logApp.warn('[AI-ChatBOT] AI returned empty response', { model: selectedModel, endpoint: OPENAI_BASE_URL });
     }
 
     writeSseEvent(res, 'metadata', { chatId, model: selectedModel });
@@ -336,7 +357,7 @@ export const getChatbotProxy = async (req: Express.Request, res: Express.Respons
       reader.cancel().catch(() => {});
     });
   } catch (e: unknown) {
-    logApp.error('Error in chatbot proxy', { cause: e });
+    logApp.error('[AI-ChatBOT] Error in chatbot proxy', { cause: e });
     const { message } = e as Error;
 
     if (!res.headersSent) {

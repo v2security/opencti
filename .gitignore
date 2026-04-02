@@ -16,8 +16,7 @@ node_modules/
 __pycache__/
 *.pyc
 *.pyo
-tools/data
-v2-connectors/data
+.docs/
 
 # Deploy artifacts
 opencti-deploy-offline/backup

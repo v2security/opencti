@@ -182,21 +182,21 @@ vi /etc/saids/opencti/.env
 
 ```bash
 # Platform
-systemctl enable opencti-platform
-systemctl start opencti-platform
-# Đợi ~60s cho platform khởi tạo xong...
+systemctl enable --now opencti-platform
+systemctl status opencti-platform
+
+# Đợi khởi tạo xong...
 
 # Workers
 systemctl enable opencti-worker@{1..3}
 systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
+
+systemctl status opencti-worker@1 opencti-worker@2 opencti-worker@3
 ```
 
 ### Bước 11: Kiểm tra
 
 ```bash
-systemctl status opencti-platform
-systemctl status opencti-worker@1 opencti-worker@2 opencti-worker@3
-
 curl -i http://localhost:8080/
 # → 200
 ```

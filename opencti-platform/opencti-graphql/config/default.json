@@ -201,10 +201,10 @@
   },
   "ai": {
     "enabled": true,
-    "type": "vllm",
+    "type": "openai",
     "endpoint": "http://localhost:8000/v1",
     "token": "",
-    "model": "Qwen/Qwen3.5-35B-A3B",
+    "model": "",
     "version": "",
     "model_images": "",
     "max_tokens": 30000,
@@ -215,10 +215,10 @@
   },
   "chatbot": {
     "enabled": true,
-    "type": "vllm",
+    "type": "openai",
     "endpoint": "http://localhost:8000/v1",
     "token": "",
-    "model": "Qwen/Qwen3.5-35B-A3B",
+    "model": "",
     "max_tokens": 4096
   },
   "xtm": {

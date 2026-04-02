@@ -35,8 +35,8 @@ services:
     ports:
       - "8686:8686"     # expose HTTP API
     volumes:
-      # - esdata:/usr/share/elasticsearch/data
-      - esdata-test:/usr/share/elasticsearch/data
+      - esdata:/usr/share/elasticsearch/data
+      # - esdata-test:/usr/share/elasticsearch/data
     environment:
       # Comment-out the line below for a cluster of multiple nodes
       - discovery.type=single-node
@@ -180,17 +180,21 @@ services:
       - SMTP__PORT=${SMTP_PORT}
       - PROVIDERS__LOCAL__STRATEGY=LocalStrategy
       - APP__HEALTH_ACCESS_KEY=${APP_HEALTH_ACCESS_KEY}
-      # AI Configuration - Anthropic Claude (dùng chung cho tất cả AI features)
+      # AI configuration shared by insights, NLQ, and other platform AI features.
+      # Use AI_TYPE=openai for both the official OpenAI API and OpenAI-compatible backends like vLLM.
       - AI__ENABLED=${AI_ENABLED}
-      - AI__TYPE=${AI_TYPE}
+      - AI__TYPE=${AI_TYPE:-openai}
       - AI__ENDPOINT=${AI_ENDPOINT}
       - AI__TOKEN=${AI_TOKEN}
       - AI__MODEL=${AI_MODEL}
-      - AI__MODEL_IMAGES=${AI_MODEL_IMAGES}
+      - AI__MODEL_IMAGES=${AI_MODEL_IMAGES:-}
       - AI__MAX_TOKENS=${AI_MAX_TOKENS}
-      - AI__TIMEOUT=${AI_TIMEOUT}
-      # Chatbot (Ask Ariane) - Anthropic Claude API
-      - CHATBOT__API_KEY=${CHATBOT_API_KEY}
+      - AI__TIMEOUT=${AI_TIMEOUT:-60000}
+      # Chatbot uses the same openai type for both OpenAI and OpenAI-compatible backends like vLLM.
+      - CHATBOT__ENABLED=${CHATBOT_ENABLED:-true}
+      - CHATBOT__TYPE=${CHATBOT_TYPE:-openai}
+      - CHATBOT__ENDPOINT=${CHATBOT_ENDPOINT:-http://localhost:8000/v1}
+      - CHATBOT__TOKEN=${CHATBOT_TOKEN:-}
       - CHATBOT__MODEL=${CHATBOT_MODEL}
       - CHATBOT__MAX_TOKENS=${CHATBOT_MAX_TOKENS}
     ports:
@@ -224,8 +228,8 @@ services:
     restart: always
 
 volumes:
-  # esdata:
-  esdata-test:
+  esdata:
+  # esdata-test:
   s3data:
   redisdata:
   rabbitmqdata:

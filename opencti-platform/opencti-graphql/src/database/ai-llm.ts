@@ -16,116 +16,94 @@ import { notify } from './redis';
 import { isEmptyField } from './utils';
 import { addNlqQueryCount } from '../manager/telemetryManager';
 
-const AI_ENABLED = conf.get('ai:enabled');
-const AI_TYPE = (conf.get('ai:type') ?? 'vllm').toLowerCase();
-const AI_ENDPOINT = conf.get('ai:endpoint');
-const AI_TOKEN = conf.get('ai:token');
-const AI_MODEL = conf.get('ai:model');
-const AI_MAX_TOKENS = conf.get('ai:max_tokens');
-const AI_VERSION = conf.get('ai:version');
-const AI_AZURE_INSTANCE = conf.get('ai:ai_azure_instance');
-const AI_AZURE_DEPLOYMENT = conf.get('ai:ai_azure_deployment');
+const AI_CONFIG = {
+  enabled: conf.get('ai:enabled'),
+  type: `${conf.get('ai:type') ?? ''}`.toLowerCase(),
+  endpoint: conf.get('ai:endpoint'),
+  token: conf.get('ai:token'),
+  model: conf.get('ai:model'),
+  maxTokens: conf.get('ai:max_tokens'),
+  version: conf.get('ai:version'),
+  azureInstance: conf.get('ai:ai_azure_instance'),
+  azureDeployment: conf.get('ai:ai_azure_deployment'),
+};
 
-const LOCAL_VLLM_API_URL = 'http://localhost:8000/v1';
-const LOCAL_VLLM_DEFAULT_MODEL = 'Qwen/Qwen3.5-35B-A3B';
-const OPENAI_COMPATIBLE_DEFAULT_API_KEY = 'dummy';
-const OPENAI_COMPATIBLE_AI_TYPES = new Set(['openai', 'vllm']);
-
+const OPENAI_COMPATIBLE_TYPES = new Set(['openai']);
+const PROVIDER_LABELS: Record<string, string> = {
+  azureopenai: 'Azure OpenAI',
+  mistralai: 'MistralAI',
+  anthropic: 'Anthropic',
+  openai: 'OpenAI',
+};
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
-const normalizeOpenAiCompatibleEndpoint = (endpoint: string) => {
+const normalizeOpenAiEndpoint = (endpoint: string) => {
   const normalizedEndpoint = endpoint.replace(/\/+$/, '');
   return normalizedEndpoint.endsWith('/v1') ? normalizedEndpoint : `${normalizedEndpoint}/v1`;
 };
 
-const isOpenAiCompatibleAiType = () => OPENAI_COMPATIBLE_AI_TYPES.has(AI_TYPE);
+const resolveAiConfig = () => {
+  const usesCustomOpenAiEndpoint = AI_CONFIG.type === 'openai' && !isEmptyField(AI_CONFIG.endpoint);
+  const endpoint = usesCustomOpenAiEndpoint
+    ? normalizeOpenAiEndpoint(AI_CONFIG.endpoint)
+    : AI_CONFIG.endpoint;
 
-const getResolvedAiEndpoint = () => {
-  if (AI_TYPE === 'vllm') {
-    return normalizeOpenAiCompatibleEndpoint(AI_ENDPOINT || LOCAL_VLLM_API_URL);
-  }
-  return AI_ENDPOINT;
+  return {
+    endpoint,
+    token: AI_CONFIG.token,
+    model: AI_CONFIG.model,
+  };
 };
 
-const getResolvedAiToken = () => {
-  if (AI_TYPE === 'vllm') {
-    // Local OpenAI-compatible servers often accept any bearer token, but the SDK still requires one.
-    return AI_TOKEN || OPENAI_COMPATIBLE_DEFAULT_API_KEY;
-  }
-  return AI_TOKEN;
+const AI = {
+  ...AI_CONFIG,
+  ...resolveAiConfig(),
 };
 
-const getResolvedAiModel = () => {
-  if (!isEmptyField(AI_MODEL)) {
-    return AI_MODEL;
-  }
-  if (AI_TYPE === 'anthropic') {
-    return ANTHROPIC_DEFAULT_MODEL;
-  }
-  if (AI_TYPE === 'vllm') {
-    return LOCAL_VLLM_DEFAULT_MODEL;
-  }
-  return AI_MODEL;
-};
-
-const hasRequiredAiConfiguration = () => {
-  switch (AI_TYPE) {
+const hasAiConfig = () => {
+  switch (AI.type) {
     case 'anthropic':
     case 'azureopenai':
     case 'mistralai':
     case 'openai':
-      return !isEmptyField(AI_TOKEN);
-    case 'vllm':
-      return true;
+      return !isEmptyField(AI.token);
     default:
       return false;
   }
 };
 
-const getAiProviderLabel = () => {
-  switch (AI_TYPE) {
-    case 'azureopenai':
-      return 'Azure OpenAI';
-    case 'mistralai':
-      return 'MistralAI';
-    case 'anthropic':
-      return 'Anthropic';
-    case 'vllm':
-      return 'vLLM';
-    case 'openai':
-    default:
-      return 'OpenAI';
-  }
-};
+const isOpenAiCompatibleType = () => OPENAI_COMPATIBLE_TYPES.has(AI.type);
 
-const getInstructionMessageRole = () => {
-  if (AI_TYPE === 'azureopenai' || AI_TYPE === 'vllm') {
-    return 'system';
-  }
-  return 'developer';
-};
+const aiErrorContext = () => ({
+  enabled: AI.enabled,
+  type: AI.type,
+  endpoint: AI.endpoint,
+  model: AI.model,
+});
 
-const AI_RESOLVED_ENDPOINT = getResolvedAiEndpoint();
-const AI_RESOLVED_TOKEN = getResolvedAiToken();
-const AI_RESOLVED_MODEL = getResolvedAiModel();
+const getProviderLabel = () => PROVIDER_LABELS[AI.type] ?? 'OpenAI';
+
+const formatNlqResultForLog = (result: Output) => ({
+  mode: result.mode,
+  filtersCount: Array.isArray(result.filters) ? result.filters.length : 0,
+  filters: result.filters,
+});
 
 let client: Mistral | OpenAI | AzureOpenAI | null = null;
 let nlqChat: ChatOpenAI | ChatMistralAI | AzureChatOpenAI | ChatAnthropic | null = null;
 // Anthropic streaming queries use raw fetch instead of the OpenAI SDK.
 let anthropicEnabled = false;
 
-if (AI_ENABLED && hasRequiredAiConfiguration()) {
-  switch (AI_TYPE) {
+if (AI.enabled && hasAiConfig()) {
+  switch (AI.type) {
     case 'anthropic': {
       anthropicEnabled = true;
-      const anthropicModel = AI_RESOLVED_MODEL || ANTHROPIC_DEFAULT_MODEL;
       const anthropicChat = new ChatAnthropic({
-        model: anthropicModel,
-        apiKey: AI_RESOLVED_TOKEN,
+        model: AI.model,
+        apiKey: AI.token,
         temperature: 0,
         maxTokens: 4096,
-        ...(isEmptyField(AI_ENDPOINT) ? {} : { anthropicApiUrl: AI_ENDPOINT }),
+        ...(isEmptyField(AI.endpoint) ? {} : { anthropicApiUrl: AI.endpoint }),
       });
       // Anthropic rejects the default top_p sent by LangChain.
       const originalInvocationParams = anthropicChat.invocationParams.bind(anthropicChat);
@@ -141,8 +119,8 @@ if (AI_ENABLED && hasRequiredAiConfiguration()) {
 
     case 'mistralai':
       client = new Mistral({
-        serverURL: isEmptyField(AI_ENDPOINT) ? undefined : AI_ENDPOINT,
-        apiKey: AI_RESOLVED_TOKEN,
+        serverURL: isEmptyField(AI.endpoint) ? undefined : AI.endpoint,
+        apiKey: AI.token,
         /* uncomment if you need low level debug on AI
         debugLogger: {
           log: (message, args) => logApp.info(`[AI] log ${message}`, { message }),
@@ -151,59 +129,42 @@ if (AI_ENABLED && hasRequiredAiConfiguration()) {
         } */
       });
 
-      if (AI_ENDPOINT.includes('https://api.mistral.ai')) {
+      if (AI.endpoint.includes('https://api.mistral.ai')) {
         // Official MistralAI API
         nlqChat = new ChatMistralAI({
-          model: AI_RESOLVED_MODEL,
-          apiKey: AI_RESOLVED_TOKEN,
+          model: AI.model,
+          apiKey: AI.token,
           temperature: 0,
         });
       } else {
         // Mistral model exposed through an OpenAI-compatible endpoint.
         nlqChat = new ChatOpenAI({
-          model: AI_RESOLVED_MODEL,
-          apiKey: AI_RESOLVED_TOKEN,
+          model: AI.model,
+          apiKey: AI.token,
           temperature: 0,
           configuration: {
-            baseURL: `${AI_ENDPOINT}/v1`,
+            baseURL: `${AI.endpoint}/v1`,
           },
         });
       }
 
       break;
 
-    case 'vllm':
-      client = new OpenAI({
-        apiKey: AI_RESOLVED_TOKEN,
-        baseURL: AI_RESOLVED_ENDPOINT,
-      });
-
-      nlqChat = new ChatOpenAI({
-        model: AI_RESOLVED_MODEL,
-        apiKey: AI_RESOLVED_TOKEN,
-        temperature: 0,
-        configuration: {
-          baseURL: AI_RESOLVED_ENDPOINT,
-        },
-      });
-
-      break;
-
     case 'openai':
-      if (!isOpenAiCompatibleAiType()) {
-        throw UnsupportedError('Incorrect AI configuration', { type: AI_TYPE });
+      if (!isOpenAiCompatibleType()) {
+        throw UnsupportedError('Incorrect AI configuration', { type: AI.type });
       }
       client = new OpenAI({
-        apiKey: AI_RESOLVED_TOKEN,
-        ...(isEmptyField(AI_ENDPOINT) ? {} : { baseURL: AI_ENDPOINT }),
+        apiKey: AI.token,
+        ...(isEmptyField(AI.endpoint) ? {} : { baseURL: AI.endpoint }),
       });
 
       nlqChat = new ChatOpenAI({
-        model: AI_RESOLVED_MODEL,
-        apiKey: AI_RESOLVED_TOKEN,
+        model: AI.model,
+        apiKey: AI.token,
         temperature: 0,
         configuration: {
-          baseURL: AI_ENDPOINT || undefined,
+          baseURL: AI.endpoint || undefined,
         },
       });
 
@@ -211,39 +172,39 @@ if (AI_ENABLED && hasRequiredAiConfiguration()) {
 
     case 'azureopenai':
       client = new AzureOpenAI({
-        apiKey: AI_RESOLVED_TOKEN,
-        ...(isEmptyField(AI_ENDPOINT) ? {} : { baseURL: AI_ENDPOINT }),
-        ...(isEmptyField(AI_VERSION) ? {} : { apiVersion: AI_VERSION }),
+        apiKey: AI.token,
+        ...(isEmptyField(AI.endpoint) ? {} : { baseURL: AI.endpoint }),
+        ...(isEmptyField(AI.version) ? {} : { apiVersion: AI.version }),
       });
 
       nlqChat = new AzureChatOpenAI({
-        azureOpenAIApiKey: AI_RESOLVED_TOKEN,
-        azureOpenAIApiVersion: AI_VERSION,
-        azureOpenAIApiInstanceName: AI_AZURE_INSTANCE,
-        azureOpenAIApiDeploymentName: AI_AZURE_DEPLOYMENT,
+        azureOpenAIApiKey: AI.token,
+        azureOpenAIApiVersion: AI.version,
+        azureOpenAIApiInstanceName: AI.azureInstance,
+        azureOpenAIApiDeploymentName: AI.azureDeployment,
         temperature: 0,
       });
 
       break;
 
     default:
-      throw UnsupportedError('Not supported AI type (currently support: vllm, mistralai, openai, azureopenai, anthropic)', { type: AI_TYPE });
+      throw UnsupportedError('Not supported AI type (currently support: mistralai, openai, azureopenai, anthropic)', { type: AI.type });
   }
 }
 
 // Query MistralAI (Streaming)
 export const queryMistralAi = async (busId: string | null, systemMessage: string, userMessage: string, user: AuthUser) => {
   if (!client) {
-    throw UnsupportedError('Incorrect AI configuration', { enabled: AI_ENABLED, type: AI_TYPE, endpoint: AI_RESOLVED_ENDPOINT, model: AI_RESOLVED_MODEL });
+    throw UnsupportedError('Incorrect AI configuration', aiErrorContext());
   }
   try {
     logApp.debug('[AI] Querying MistralAI with prompt', { questionStart: userMessage.substring(0, 100) });
     const request: ChatCompletionStreamRequest = {
-      model: AI_RESOLVED_MODEL,
+      model: AI.model,
       temperature: 0,
       messages: [
         { role: 'system', content: systemMessage },
-        { role: 'user', content: truncate(userMessage, AI_MAX_TOKENS, false) },
+        { role: 'user', content: truncate(userMessage, AI.maxTokens, false) },
       ],
     };
     const response = await (client as Mistral)?.chat.stream(request);
@@ -272,18 +233,19 @@ export const queryMistralAi = async (busId: string | null, systemMessage: string
 };
 
 // Query OpenAI (Streaming)
-export const queryChatGpt = async (busId: string | null, developerMessage: string, userMessage: string, user: AuthUser) => {
+export const queryChatGpt = async (busId: string | null, systemMessage: string, userMessage: string, user: AuthUser) => {
   if (!client) {
-    throw UnsupportedError('Incorrect AI configuration', { enabled: AI_ENABLED, type: AI_TYPE, endpoint: AI_RESOLVED_ENDPOINT, model: AI_RESOLVED_MODEL });
+    throw UnsupportedError('Incorrect AI configuration', aiErrorContext());
   }
   try {
-    logApp.info(`[AI] Querying ${getAiProviderLabel()} with prompt`, { type: AI_TYPE });
+    const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+      { role: 'system', content: systemMessage },
+      { role: 'user', content: truncate(userMessage, AI.maxTokens, false) },
+    ];
+    logApp.info(`[AI] Querying ${getProviderLabel()}`, { type: AI.type, model: AI.model, endpoint: AI.endpoint, messageCount: messages.length, userMsgStart: userMessage.substring(0, 150) });
     const response = await (client as OpenAI)?.chat.completions.create({
-      model: AI_RESOLVED_MODEL,
-      messages: [
-        { role: getInstructionMessageRole(), content: developerMessage },
-        { role: 'user', content: truncate(userMessage, AI_MAX_TOKENS, false) },
-      ],
+      model: AI.model,
+      messages,
       stream: true,
     });
     let content = '';
@@ -298,12 +260,13 @@ export const queryChatGpt = async (busId: string | null, developerMessage: strin
           }
         }
       }
+      logApp.info(`[AI] ${getProviderLabel()} response received`, { type: AI.type, model: AI.model, responseLength: content.length });
       return content;
     }
-    logApp.error('[AI] No response from OpenAI', { busId, developerMessage, userMessage });
+    logApp.error('[AI] No response from OpenAI', { busId, model: AI.model, endpoint: AI.endpoint });
     return 'No response from OpenAI';
   } catch (err) {
-    logApp.error('[AI] Cannot query OpenAI', { cause: err });
+    logApp.error('[AI] Cannot query OpenAI', { cause: err, model: AI.model, endpoint: AI.endpoint });
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-expect-error
     return `An error occurred: ${err.toString()}`;
@@ -311,18 +274,18 @@ export const queryChatGpt = async (busId: string | null, developerMessage: strin
 };
 
 export const queryAnthropic = async (busId: string | null, systemMessage: string, userMessage: string, user: AuthUser) => {
-  if (!anthropicEnabled || isEmptyField(AI_RESOLVED_TOKEN)) {
-    throw UnsupportedError('Incorrect AI configuration for Anthropic', { enabled: AI_ENABLED, type: AI_TYPE, model: AI_RESOLVED_MODEL });
+  if (!anthropicEnabled || isEmptyField(AI.token)) {
+    throw UnsupportedError('Incorrect AI configuration for Anthropic', { enabled: AI.enabled, type: AI.type, model: AI.model });
   }
   try {
-    const model = AI_RESOLVED_MODEL || ANTHROPIC_DEFAULT_MODEL;
-    const maxTokens = AI_MAX_TOKENS || 4096;
+    const model = AI.model;
+    const maxTokens = AI.maxTokens || 4096;
     logApp.debug('[AI] Querying Anthropic with prompt', { questionStart: userMessage.substring(0, 100), model });
-    const response = await fetch(AI_ENDPOINT || ANTHROPIC_API_URL, {
+    const response = await fetch(AI.endpoint || ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': AI_RESOLVED_TOKEN,
+        'x-api-key': AI.token,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
@@ -331,7 +294,7 @@ export const queryAnthropic = async (busId: string | null, systemMessage: string
         stream: true,
         system: systemMessage,
         messages: [
-          { role: 'user', content: truncate(userMessage, AI_MAX_TOKENS, false) },
+          { role: 'user', content: truncate(userMessage, AI.maxTokens, false) },
         ],
       }),
     });
@@ -386,28 +349,27 @@ export const queryAnthropic = async (busId: string | null, systemMessage: string
   }
 };
 
-export const queryAi = async (busId: string | null, developerMessage: string | null, userMessage: string, user: AuthUser) => {
-  const finalDeveloperMessage = developerMessage || 'You are an assistant helping a cyber threat intelligence analyst to better understand cyber threat intelligence data.';
-  switch (AI_TYPE) {
+export const queryAi = async (busId: string | null, systemMessage: string | null, userMessage: string, user: AuthUser) => {
+  const finalSystemMessage = systemMessage || 'You are an assistant helping a cyber threat intelligence analyst to better understand cyber threat intelligence data.';
+  switch (AI.type) {
     case 'anthropic':
-      return queryAnthropic(busId, finalDeveloperMessage, userMessage, user);
+      return queryAnthropic(busId, finalSystemMessage, userMessage, user);
     case 'mistralai':
-      return queryMistralAi(busId, finalDeveloperMessage, userMessage, user);
+      return queryMistralAi(busId, finalSystemMessage, userMessage, user);
     case 'azureopenai':
     case 'openai':
-    case 'vllm':
-      return queryChatGpt(busId, finalDeveloperMessage, userMessage, user);
+      return queryChatGpt(busId, finalSystemMessage, userMessage, user);
     default:
-      throw UnsupportedError('Not supported AI type', { type: AI_TYPE });
+      throw UnsupportedError('Not supported AI type', { type: AI.type });
   }
 };
 
 export const queryNLQAi = async (promptValue: ChatPromptValueInterface) => {
   const badAiConfigError = UnsupportedError('Incorrect AI configuration for NLQ', {
-    enabled: AI_ENABLED,
-    type: AI_TYPE,
-    endpoint: AI_RESOLVED_ENDPOINT,
-    model: AI_RESOLVED_MODEL,
+    enabled: AI.enabled,
+    type: AI.type,
+    endpoint: AI.endpoint,
+    model: AI.model,
   });
   if (!nlqChat) {
     throw badAiConfigError;
@@ -415,10 +377,10 @@ export const queryNLQAi = async (promptValue: ChatPromptValueInterface) => {
 
   await addNlqQueryCount();
 
-  logApp.info('[NLQ] Querying AI model for structured output');
+  logApp.info('[AI-NLQ] Querying AI model for structured output', { type: AI.type, model: AI.model, endpoint: AI.endpoint });
   try {
     // Anthropic is more reliable here with bindTools than with strict structured output parsing.
-    if (AI_TYPE === 'anthropic') {
+    if (AI.type === 'anthropic') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const chat = nlqChat as any;
       const bound = chat.bindTools(
@@ -436,14 +398,17 @@ export const queryNLQAi = async (promptValue: ChatPromptValueInterface) => {
         }
       }
       delete args.filterGroups; // Remove extra fields not in OutputSchema
+      logApp.info('[AI-NLQ] AI response received (anthropic)', formatNlqResultForLog(args as Output));
       return args as Output;
     }
     // Cast to any to bypass LangChain union overload incompatibilities here.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chat = nlqChat as any;
-    return await chat.withStructuredOutput(OutputSchema).invoke(promptValue) as Output;
+    const result = await chat.withStructuredOutput(OutputSchema).invoke(promptValue) as Output;
+    logApp.info('[AI-NLQ] AI response received', { type: AI.type, ...formatNlqResultForLog(result) });
+    return result;
   } catch (err) {
-    logApp.error('[NLQ] Error in queryNLQAi', { cause: err, aiType: AI_TYPE });
+    logApp.error('[AI-NLQ] Error in queryNLQAi', { cause: err, aiType: AI.type, model: AI.model, endpoint: AI.endpoint });
     if (err instanceof AuthenticationError) {
       throw badAiConfigError;
     }
