@@ -1,0 +1,5 @@
+deploy/connector-status
+deploy/connector-summary
+deploy/connector-monitor
+!deploy/*.service
+!deploy/*.timer

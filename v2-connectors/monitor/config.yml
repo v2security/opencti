@@ -1,0 +1,7 @@
+elasticsearch:
+  url: http://localhost:8686
+  index_prefix: opencti
+
+telegram:
+  bot_token: "8760411583:AAEaMSvoiwvZT8gyDRiHS2djR7ZegbxFI9M"
+  chat_id: "-1003831445471"
