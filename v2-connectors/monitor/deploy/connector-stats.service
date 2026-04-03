@@ -1,17 +1,17 @@
 [Unit]
-Description=OpenCTI Connector Event Summary (daily)
+Description=OpenCTI Connector Event Statistic (daily)
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=oneshot
 WorkingDirectory=/opt/tools
-ExecStart=/opt/tools/connector-summary
+ExecStart=/opt/tools/connector-stats
 EnvironmentFile=/etc/saids/opencti/.env
 
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=connector-summary
+SyslogIdentifier=connector-stats
 
 NoNewPrivileges=yes
 ProtectSystem=strict

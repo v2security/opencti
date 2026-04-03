@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"connector-monitor/internal/config"
-	"connector-monitor/internal/domain"
+	"connector-monitor/internal/connstatus"
 	"connector-monitor/internal/es"
 	"connector-monitor/internal/telegram"
 )
@@ -43,7 +43,8 @@ func main() {
 	// Step 1: Fetch connectors from ES
 	slog.Info("step 1/2: fetch connectors")
 	client := es.NewClient(cfg.Elasticsearch.URL, cfg.Elasticsearch.IndexPrefix)
-	connectors, err := client.GetConnectors()
+	repo := connstatus.NewRepo(client)
+	connectors, err := repo.GetAll()
 	if err != nil {
 		slog.Error("get connectors", "err", err)
 		os.Exit(1)
@@ -52,7 +53,12 @@ func main() {
 
 	// Step 2: Format and send
 	slog.Info("step 2/2: format and send")
-	message := formatStatus(connectors)
+	var message string
+	if cfg.Telegram.Format == "text" {
+		message = formatStatusText(connectors)
+	} else {
+		message = formatStatusTable(connectors)
+	}
 
 	if *stdoutOnly {
 		fmt.Println(message)
@@ -67,37 +73,103 @@ func main() {
 	slog.Info("status report sent", "connectors", len(connectors))
 }
 
-func formatStatus(connectors []domain.ConnectorStatus) string {
+func formatStatusTable(connectors []connstatus.Connector) string {
 	now := time.Now().In(vnTZ)
 	var sb strings.Builder
 
-	fmt.Fprintf(&sb, "🔔 *Connector Status* — %s\n\n", telegram.Esc(now.Format("02/01/2006 15:04 MST")))
+	activeCount, inactiveCount := countStatus(connectors)
 
+	fmt.Fprintf(&sb, "🔔 *Connector Status*\n")
+	fmt.Fprintf(&sb, "_%s_\n", telegram.Esc(now.Format("02/01/2006 15:04 +07")))
+	fmt.Fprintf(&sb, "Total: %s  \\|  Active: %s  \\|  Inactive: %s\n\n",
+		telegram.Esc(fmt.Sprintf("%d", len(connectors))),
+		telegram.Esc(fmt.Sprintf("%d", activeCount)),
+		telegram.Esc(fmt.Sprintf("%d", inactiveCount)),
+	)
+
+	nameW := 26
 	sb.WriteString("```\n")
-	fmt.Fprintf(&sb, "%-28s %8s %s\n", "Connector", "Status", "Last Ping")
-	sb.WriteString(strings.Repeat("─", 54))
-	sb.WriteString("\n")
+	fmt.Fprintf(&sb, " %-*s │ %-8s │ %s\n", nameW, "Connector", "Status", "Last Ping")
+	fmt.Fprintf(&sb, "─%s─┼──────────┼────────────────\n", strings.Repeat("─", nameW))
 
 	for _, c := range connectors {
-		active := domain.IsActive(c)
-
-		status := "✓ active"
+		active := connstatus.IsActive(c)
 		pingStr := c.UpdatedAt.In(vnTZ).Format("15:04")
-		if !active {
+
+		var statusIcon, statusLabel string
+		if active {
+			statusIcon = "●"
+			statusLabel = "OK"
+		} else {
+			statusIcon = "○"
 			mins := int(math.Floor(time.Since(c.UpdatedAt).Minutes()))
-			status = "✗ inactive"
-			pingStr += fmt.Sprintf(" (%s)", formatDuration(mins))
+			statusLabel = "DOWN"
+			pingStr += " (" + formatDuration(mins) + ")"
 		}
 
-		fmt.Fprintf(&sb, "%-28s %10s %s\n",
-			truncate(c.Name, 28),
-			status,
+		fmt.Fprintf(&sb, " %-*s │ %s %-6s │ %s\n",
+			nameW,
+			truncate(c.Name, nameW),
+			statusIcon,
+			statusLabel,
 			pingStr,
 		)
 	}
 
-	sb.WriteString("```\n")
+	sb.WriteString("```")
 	return sb.String()
+}
+
+func formatStatusText(connectors []connstatus.Connector) string {
+	now := time.Now().In(vnTZ)
+	var sb strings.Builder
+
+	activeCount, inactiveCount := countStatus(connectors)
+
+	fmt.Fprintf(&sb, "🔔 *Connector Status*\n")
+	fmt.Fprintf(&sb, "_%s_\n", telegram.Esc(now.Format("02/01/2006 15:04 +07")))
+	fmt.Fprintf(&sb, "Total: %s  \\|  Active: %s  \\|  Inactive: %s\n",
+		telegram.Esc(fmt.Sprintf("%d", len(connectors))),
+		telegram.Esc(fmt.Sprintf("%d", activeCount)),
+		telegram.Esc(fmt.Sprintf("%d", inactiveCount)),
+	)
+
+	// Show DOWN connectors first if any
+	if inactiveCount > 0 {
+		sb.WriteString("\n⚠️ *DOWN:*\n")
+		for _, c := range connectors {
+			if !connstatus.IsActive(c) {
+				mins := int(math.Floor(time.Since(c.UpdatedAt).Minutes()))
+				fmt.Fprintf(&sb, "  ○ *%s*\n", telegram.Esc(c.Name))
+				fmt.Fprintf(&sb, "     Ping: %s \\(%s trước\\)\n",
+					telegram.Esc(c.UpdatedAt.In(vnTZ).Format("15:04")),
+					telegram.Esc(formatDuration(mins)),
+				)
+			}
+		}
+	}
+
+	sb.WriteString("\n✅ *Active:*\n")
+	for _, c := range connectors {
+		if connstatus.IsActive(c) {
+			fmt.Fprintf(&sb, "  ● %s — %s\n",
+				telegram.Esc(c.Name),
+				telegram.Esc(c.UpdatedAt.In(vnTZ).Format("15:04")),
+			)
+		}
+	}
+
+	return sb.String()
+}
+
+func countStatus(connectors []connstatus.Connector) (active, inactive int) {
+	for _, c := range connectors {
+		if connstatus.IsActive(c) {
+			active++
+		}
+	}
+	inactive = len(connectors) - active
+	return
 }
 
 func truncate(s string, maxLen int) string {

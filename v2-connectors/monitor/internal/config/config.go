@@ -18,6 +18,7 @@ type Elasticsearch struct {
 type Telegram struct {
 	BotToken string `yaml:"bot_token"`
 	ChatID   string `yaml:"chat_id"`
+	Format   string `yaml:"format"` // "table" (default) or "text"
 }
 
 // Config holds all runtime configuration.
@@ -43,6 +44,7 @@ func Load() (*Config, error) {
 		"ES_INDEX_PREFIX":    &cfg.Elasticsearch.IndexPrefix,
 		"TELEGRAM_BOT_TOKEN": &cfg.Telegram.BotToken,
 		"TELEGRAM_CHAT_ID":   &cfg.Telegram.ChatID,
+		"TELEGRAM_FORMAT":    &cfg.Telegram.Format,
 	}
 	for key, ptr := range overrides {
 		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
@@ -52,6 +54,11 @@ func Load() (*Config, error) {
 
 	if cfg.Elasticsearch.URL == "" {
 		return nil, fmt.Errorf("missing required: elasticsearch.url (config.yml or ES_URL)")
+	}
+
+	// Default format
+	if cfg.Telegram.Format == "" {
+		cfg.Telegram.Format = "table"
 	}
 
 	return cfg, nil

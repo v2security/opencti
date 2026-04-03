@@ -5,3 +5,4 @@ elasticsearch:
 telegram:
   bot_token: "8760411583:AAEaMSvoiwvZT8gyDRiHS2djR7ZegbxFI9M"
   chat_id: "-1003831445471"
+  format: text  # "table" (mặc định, đẹp trên PC) hoặc "text" (dễ đọc trên điện thoại)

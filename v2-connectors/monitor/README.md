@@ -1,365 +1,202 @@
-# connector-monitor — OpenCTI Connector Monitor
+# Connector Monitor
 
-Tools giám sát các OpenCTI connector, tự động gửi báo cáo hàng ngày qua Telegram.
+Giám sát connector OpenCTI qua Elasticsearch và gửi thông báo Telegram.
 
+Gồm 2 chương trình độc lập:
 
-1 tiếng check 1 lần lấy thời gian hiện trừ đi 1 tiếng
-## Luồng xử lý
+| Chương trình | Mục đích | Lịch chạy |
+|---|---|---|
+| `connector-status` | Kiểm tra trạng thái hoạt động (active/down) của tất cả connector | Mỗi giờ |
+| `connector-stats` | Tổng hợp thống kê chạy của ngày hôm qua (runs, items, errors) | Hàng ngày 08:00 ICT |
 
-```
-Elasticsearch ──GET opencti_internal_objects-*──→ Danh sách connector + heartbeat (refreshed_at)
-    → Đánh giá trạng thái: inactive nếu updated_at > 5 phút trước
-    → (Parallel goroutine/connector) GET opencti_history-* → work stats 24h (runs / items / errors)
-    → (Parallel × 5) GET stix_domain_objects / stix_cyber_observables / stix_core_relationships
-        → tổng và số mới 24h của Vulnerability, Indicator, Organization, Software, Relationship
-    → Format báo cáo MarkdownV2
-    → Telegram Bot API ──sendMessage──→ Group/Channel nhận báo cáo
-```
-
-**Scheduler:** Cron expression, mặc định `0 8 * * *` (08:00 ICT mỗi ngày).
-**Graceful shutdown:** Bắt `SIGINT` / `SIGTERM`, dừng scheduler sạch trước khi thoát.
-
-## 2 chế độ hoạt động
-
-| Chế độ | Flag | Mô tả |
-|--------|------|-------|
-| **Scheduled** | *(mặc định)* | Chạy theo cron, gửi báo cáo đúng giờ mỗi ngày |
-| **One-shot** | `--run-now` | Chạy một lần, gửi báo cáo ngay rồi thoát |
-
-## Logic giám sát
-
-### Phát hiện connector lỗi
-
-| Trạng thái | Điều kiện | Nguồn dữ liệu |
-|------------|-----------|---------------|
-| **inactive** | `updated_at` > **5 phút** trước | `opencti_internal_objects-*` → trường `updated_at` |
-| **stalled** | Có job trong 24h nhưng `completed_number` = 0 | `opencti_history-*` → aggregation `sum(completed_number)` |
-
-Connector lỗi → đánh dấu `🔴` + liệt kê lý do cụ thể (`AlertReasons`) trong báo cáo.
-
-### STIX entity theo dõi
-
-| Entity | Index | Ghi chú |
-|--------|-------|---------|
-| Vulnerability | `opencti_stix_domain_objects-*` | CVE từ NVD connector |
-| Indicator | `opencti_stix_domain_objects-*` | IOC từ botnet connector |
-| Organization | `opencti_stix_domain_objects-*` | Vendor từ CPE |
-| Software (CPE) | `opencti_stix_cyber_observables-*` | CPE configs từ NVD |
-| Relationship | `opencti_stix_core_relationships-*` | `has`, `related-to`... |
-
-Với mỗi loại: hiển thị **tổng số** và **số mới tạo trong 24h** (filter `created_at >= now-24h`).
-
-## Cấu trúc
+## Cấu trúc thư mục
 
 ```
-connector-monitor/
-├── main.go                      ← Entry point: parse --run-now, validate config, khởi tạo scheduler, graceful shutdown
-├── config.yml                   ← Cấu hình (override bằng env vars)
-├── go.mod / go.sum
-└── src/
-    ├── config/
-    │   └── config.go            ← Load config: đọc YAML rồi override bằng env vars
-    ├── domain/
-    │   ├── types.go             ← ConnectorStatus, WorkStats, ConnectorReport, STIXCount
-    │   └── rules.go             ← IsInactive (5min), IsStalled, ShouldAlert, AlertReasons
-    ├── gateway/
-    │   ├── es.go                ← ESClient: GetConnectors, GetWorks24h, GetStixCounts (parallel × 5)
-    │   └── telegram.go          ← TelegramSender: Send MarkdownV2, timeout 10s
-    └── service/
-        └── report.go            ← Reporter: fetch → format → gửi; escape MarkdownV2 special chars
+monitor/
+├── cmd/
+│   ├── connector-status/main.go   # Chương trình 1: kiểm tra trạng thái
+│   └── connector-stats/main.go    # Chương trình 2: thống kê sự kiện
+├── internal/
+│   ├── config/config.go           # Đọc config.yml + env override
+│   ├── connstatus/                # Model + repo: trạng thái connector
+│   │   ├── model.go               #   Connector struct, IsActive()
+│   │   └── repo.go                #   Query ES internal_objects
+│   ├── connstats/                 # Model + repo: thống kê work
+│   │   ├── model.go               #   WorkStats struct
+│   │   └── repo.go                #   Query ES history (aggregation)
+│   ├── es/client.go               # HTTP client Elasticsearch dùng chung
+│   └── telegram/sender.go         # Gửi message Telegram (MarkdownV2)
+├── deploy/                        # Systemd service + timer
+├── config.yml                     # Cấu hình
+├── Makefile
+└── go.mod
 ```
 
+## Yêu cầu
 
-## Elasticsearch indexes sử dụng
+- Go 1.21+
+- Elasticsearch (cùng cluster với OpenCTI)
+- Telegram Bot Token + Chat ID
 
-Tất cả index dùng pattern `<prefix>_<name>-*` để hỗ trợ ILM rollover:
+## Cấu hình
 
-| Index pattern | Mục đích | Trường dùng |
-|---------------|----------|-------------|
-| `opencti_internal_objects-*` | Connector status + heartbeat | `entity_type=connector`, `refreshed_at`, `connector_info.{last,next}_run_datetime` |
-| `opencti_history-*` | Work job stats 24h | `entity_type=work`, `connector_id`, `completed_number`, `received_time` |
-| `opencti_stix_domain_objects-*` | Vulnerability, Indicator, Organization | `entity_type`, `created_at` |
-| `opencti_stix_cyber_observables-*` | Software (CPE) | `entity_type=software`, `created_at` |
-| `opencti_stix_core_relationships-*` | Relationships | `created_at` |
+File `config.yml`:
 
+```yaml
+elasticsearch:
+  url: http://localhost:9200
+  index_prefix: opencti
 
- Logic:                                  
-  - Nếu connector là built-in: dùng giá   
-  trị active lưu trong DB (mặc định true) 
-  - Nếu connector là non built-in (như "Botnet IOC (V2Secure)"): active = true nếu updated_at < 5 phút trước, ngược lại là false                               
-                                          
-  Connector trong JSON có active: true nghĩa là thời điểm query,updated_at (2026-03-31T06:38:27.020Z) vẫn còn trong vòng 5 phút. Nếu connector không heartbeat/update trong 5 phút thì active sẽ tự động là false. 
-
-Elasticsearch lưu updated_at trong index opencti_internal_objects, còn active chỉ là derivedfield được tính on-the-fly khi API trả về response như dưới đây:
-```
-curl -X GET "http://163.223.58.7:8686/opencti_internal_objects/_search" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": {
-      "term": {
-        "entity_type.keyword": "Connector"
-      }
-    },
-    "_source": ["name", "updated_at", "built_in"]
-  }' | jq
-
-{
-  "took": 4,
-  "timed_out": false,
-  "_shards": {
-    "total": 1,
-    "successful": 1,
-    "skipped": 0,
-    "failed": 0
-  },
-  "hits": {
-    "total": {
-      "value": 3,
-      "relation": "eq"
-    },
-    "max_score": 5.983355,
-    "hits": [
-      {
-        "_index": "opencti_internal_objects-000001",
-        "_id": "91ebe800-f2c9-46f3-9c41-02790b0579f1",
-        "_score": 5.983355,
-        "_source": {
-          "name": "OpenCTI LLM/RAG Connector",
-          "built_in": false,
-          "updated_at": "2026-03-31T06:52:19.227Z"
-        }
-      },
-      {
-        "_index": "opencti_internal_objects-000001",
-        "_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
-        "_score": 5.983355,
-        "_source": {
-          "name": "Botnet IOC (V2Secure)",
-          "built_in": false,
-          "updated_at": "2026-03-31T06:52:30.280Z"
-        }
-      },
-      {
-        "_index": "opencti_internal_objects-000001",
-        "_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        "_score": 5.983355,
-        "_source": {
-          "name": "NVD CVE (V2Secure)",
-          "built_in": false,
-          "updated_at": "2026-03-31T06:52:30.303Z"
-        }
-      }
-    ]
-  }
-}
+telegram:
+  bot_token: "<BOT_TOKEN>"
+  chat_id: "<CHAT_ID>"
+  format: table  # "table" hoặc "text"
 ```
 
+- **table** (mặc định) — Bảng monospace, đẹp trên PC/tablet
+- **text** — Danh sách text thường, dễ đọc trên điện thoại màn hình nhỏ
+
+Có thể override bằng biến môi trường (ưu tiên cao hơn file):
+
+| Biến môi trường | Ghi đè |
+|---|---|
+| `ES_URL` | `elasticsearch.url` |
+| `TELEGRAM_BOT_TOKEN` | `telegram.bot_token` |
+| `TELEGRAM_CHAT_ID` | `telegram.chat_id` |
+| `TELEGRAM_FORMAT` | `telegram.format` |
+
+## Build
+
+```bash
+make build
+# Output: deploy/connector-status, deploy/connector-stats
 ```
-export const completeConnector = (connector) => {
-  if (connector) {
-    const completed = { ...connector };
-    completed.title = connector.title ? connector.title : connector.name;
-    completed.is_managed = isNotEmptyField(connector.catalog_id);
-    completed.connector_scope = connector.connector_scope ? connector.connector_scope.split(',') : [];
-    completed.config = connectorConfig(connector.id, connector.listen_callback_uri);
-    completed.active = connector.built_in ? (connector.active ?? true) : (sinceNowInMinutes(connector.updated_at) < 5);
-    return completed;
-  }
-  return null;
-};
+
+## Chạy thử
+
+```bash
+# In ra terminal, không gửi Telegram
+./deploy/connector-status --stdout-only
+./deploy/connector-stats --stdout-only
+
+# Gửi Telegram thật
+./deploy/connector-status
+./deploy/connector-stats
 ```
 
- 1. Lấy danh sách Connector              
-                                          
-  Index: opencti_internal_objects-*
-```                                      
-  curl -X POST "http://localhost:8686/open
-  cti_internal_objects-*/_search" \       
-    -H "Content-Type: application/json" \
-    -d '{                                 
-      "size": 1000,                       
-      "query": {                          
-        "term": { "entity_type.keyword":  
-  "connector" }                           
-      },                                  
-      "_source": ["internal_id", "name",  
-  "refreshed_at", "connector_info"]       
-    }' 
-```                                   
-                                          
-  ---                                     
-  2. Lấy Work Stats 24h của một Connector
-                                          
-  Index: opencti_history-*
+## Mẫu tin nhắn
 
-```                                 
-  curl -X POST "http://localhost:8686/open
-  cti_history-*/_search" \                
-    -H "Content-Type: application/json" \
-    -d '{                                 
-      "size": 0,                          
-      "query": {                          
-        "bool": {                         
-          "must": [                       
-            { "term": {                   
-  "entity_type.keyword": "work" } },      
-            { "term": { 
-  "connector_id.keyword":                 
-  "b2c3d4e5-f6a7-8901-bcde-f12345678901" }
-   },                                     
-            { "range": { "received_time": 
-  { "gte": "now-24h" } } }                
-          ]
-        }                                 
-      },                                  
-      "aggs": {
-        "total_items":  { "sum":    {     
-  "field": "completed_number" } },        
-        "total_errors": { "filter": {     
-  "term": { "status.keyword": "error" } } 
-  }               
-      }                                   
-    }'            
-```                                         
-  Kết quả trả về:                         
-  - hits.total.value → số lần chạy        
-  (works_count)                           
-  - aggregations.total_items.value → tổng
-  items đã import                         
-  - aggregations.total_errors.doc_count → 
-  số lần lỗi
-                                          
-  ---             
-  3. Đếm STIX Entities                    
-                                          
-  Vulnerability — tổng:
+### connector-status
 
+**Dạng table** (format: table):
 ```
-  curl -X POST "http://localhost:8686/open
-  cti_stix_domain_objects-*/_search" \    
-    -H "Content-Type: application/json" \ 
-    -d '{                                
-      "size": 0,                          
-      "query": { "term": { 
-  "entity_type.keyword": "vulnerability" }
-   }                                      
-    }'                                    
-```                                        
-  Vulnerability — mới 24h:
+🔔 Connector Status
+03/04/2026 11:00 +07
+Total: 17  |  Active: 16  |  Inactive: 1
 
+ Connector                  │ Status   │ Last Ping
+────────────────────────────┼──────────┼────────────────
+ NVD CVE (V2Secure)         │ ● OK     │ 11:00
+ OpenCTI LLM/RAG Connector  │ ○ DOWN   │ 11:49 (23 giờ)
 ```
-  curl -X POST "http://localhost:8686/open
-  cti_stix_domain_objects-*/_search" \    
-    -H "Content-Type: application/json" \ 
-    -d '{                                 
-      "size": 0,                          
-      "query": {  
-        "bool": {                         
-          "must": [                       
-            { "term": {                   
-  "entity_type.keyword": "vulnerability" }
-   },                                     
-            { "range": { "created_at": { 
-  "gte": "now-24h" } } }                  
-          ]                               
-        }  
-      }                                   
-    }'            
- ```                                         
-  Indicator, Organization — thay
-  "vulnerability" bằng "indicator" /      
-  "organization" (cùng index
-  stix_domain_objects)                    
-                  
-  Software (CPE):
 
-```                      
-  curl -X POST "http://localhost:8686/open
-  cti_stix_cyber_observables-*/_search" \ 
-    -H "Content-Type: application/json" \ 
-    -d '{                                
-      "size": 0,                          
-      "query": { "term": {                
-  "entity_type.keyword": "software" } }   
-    }'                                    
-```                                      
-  Relationship — tổng:  
-
-```                  
-  curl -X POST "http://localhost:8686/open
-  cti_stix_core_relationships-*/_search" \
-    -H "Content-Type: application/json" \ 
-    -d '{ "size": 0, "query": {           
-  "match_all": {} } }'     
-```               
-                                          
-  Relationship — mới 24h:   
-
-```            
-  curl -X POST "http://localhost:8686/open
-  cti_stix_core_relationships-*/_search" \
-    -H "Content-Type: application/json" \ 
-    -d '{                                
-      "size": 0,                          
-      "query": { "range": { "created_at": 
-  { "gte": "now-24h" } } }                
-    }'              
-```                      
-                                        
-  ---                                     
-  Bảng tóm tắt                            
-                                          
-  Số liệu: Danh sách connector            
-  Index: opencti_internal_objects-*       
-  Filter chính: entity_type = connector
-  ────────────────────────────────────────
-  Số liệu: Work runs 24h              
-  Index: opencti_history-*                
-  Filter chính: entity_type = work +  
-    connector_id + received_time ≥ now-24h
-  ────────────────────────────────────────
-  Số liệu: Items imported                 
-  Index: opencti_history-*                
-  Filter chính: agg sum(completed_number) 
-  ────────────────────────────────────────
-  Số liệu: Errors                         
-  Index: opencti_history-*
-  Filter chính: agg filter(status = error)
-  ────────────────────────────────────────
-  Số liệu: Vulnerability                  
-  Index: opencti_stix_domain_objects-*
-  Filter chính: entity_type =             
-  vulnerability   
-  ────────────────────────────────────────
-  Số liệu: Indicator                      
-  Index: opencti_stix_domain_objects-*
-  Filter chính: entity_type = indicator   
-  ────────────────────────────────────────
-  Số liệu: Organization                   
-  Index: opencti_stix_domain_objects-*
-  Filter chính: entity_type = organization
-  ────────────────────────────────────────
-  Số liệu: Software/CPE                   
-  Index: opencti_stix_cyber_observables-*
-  Filter chính: entity_type = software    
-  ────────────────────────────────────────
-  Số liệu: Relationship                   
-  Index: opencti_stix_core_relationships-*
-  Filter chính: match_all 
-
-
+**Dạng text** (format: text) — dễ đọc trên điện thoại:
 ```
-// opencti-platform/opencti-graphql/src/domain/connector.ts
-export const pingConnector = async (context: AuthContext, user: AuthUser, id: string, state: string, connectorInfo: ConnectorInfo) => {
-  const connectorEntity = await storeLoadById(context, user, id, ENTITY_TYPE_CONNECTOR) as unknown as BasicStoreEntityConnector;
-  if (!connectorEntity) {
-    throw FunctionalError('No connector found with the specified ID', { id });
-  }
-  // Ensure queue are correctly setup
-  const scopes = connectorEntity.connector_scope ? connectorEntity.connector_scope.split(',') : [];
-  await registerConnectorQueues(connectorEntity.id, connectorEntity.name, connectorEntity.connector_type, scopes);
+🔔 Connector Status
+03/04/2026 11:00 +07
+Total: 17  |  Active: 16  |  Inactive: 1
 
-  await updateConnectorWithConnectorInfo(context, user, connectorEntity, state, connectorInfo);
-  return storeLoadById(context, user, id, 'Connector').then((data) => completeConnector(data));
-};
+⚠️ DOWN:
+  ○ OpenCTI LLM/RAG Connector
+     Ping: 11:49 (23 giờ trước)
+
+✅ Active:
+  ● NVD CVE (V2Secure) — 11:00
+  ● MISP OSINT Feed — 11:00
+  ...
+```
+
+- **● OK** — Connector đang hoạt động bình thường (heartbeat trong 5 phút gần nhất)
+- **○ DOWN** — Connector không phản hồi, kèm thời gian kể từ lần ping cuối
+
+### connector-stats
+
+**Dạng table** (format: table):
+```
+📊 Event Summary
+02/04/2026  (02/04 00:00 → 02/04 23:59)
+
+• Runs — Số lần connector chạy (work cycle)
+• Items — Số đối tượng STIX đã xử lý
+• Errors — Số lỗi phát sinh khi import
+
+Tổng: 16 runs  |  191,779 items  |  2 errors
+
+ Connector                  │  Runs │   Items │ Errors
+────────────────────────────┼───────┼─────────┼────────
+ NVD CVE (V2Secure)         │     6 │  27,664 │      0
+ MISP OSINT Feed            │     2 │ 163,392 │ !    2
+────────────────────────────┼───────┼─────────┼────────
+ TOTAL                      │    16 │ 191,779 │      2
+```
+
+**Dạng text** (format: text) — dễ đọc trên điện thoại:
+```
+📊 Event Summary
+02/04/2026  (02/04 00:00 → 02/04 23:59)
+
+Tổng: 16 runs  |  191,779 items  |  2 errors
+
+⚠️ Có lỗi:
+  ❌ MISP OSINT Feed
+     2 runs · 163,392 items · 2 errors
+
+📦 Hoạt động:
+  ✅ NVD CVE (V2Secure)
+     6 runs · 27,664 items
+
+💤 Không chạy:
+  Shodan, SOCRadar, ImportDocument, ...
+```
+
+- **Runs** — Số lần connector thực hiện 1 chu kỳ work
+- **Items** — Tổng số đối tượng STIX (indicator, malware, relationship...) đã xử lý
+- **Errors** — Số lỗi trong quá trình import, dòng có `!` là connector có lỗi
+
+## Deploy (systemd)
+
+```bash
+# Copy binary
+sudo cp deploy/connector-status deploy/connector-stats /opt/tools/
+
+# Copy systemd units
+sudo cp deploy/*.service deploy/*.timer /etc/systemd/system/
+
+# Tạo file env (nếu dùng env override)
+sudo mkdir -p /etc/saids/opencti
+sudo tee /etc/saids/opencti/.env <<'EOF'
+ES_URL=http://localhost:8686
+TELEGRAM_BOT_TOKEN=<token>
+TELEGRAM_CHAT_ID=<chat_id>
+EOF
+
+# Enable timers
+sudo systemctl daemon-reload
+sudo systemctl enable --now connector-status.timer
+sudo systemctl enable --now connector-stats.timer
+
+# Kiểm tra
+systemctl list-timers connector-*
+```
+
+| Timer | Lịch | Mô tả |
+|---|---|---|
+| `connector-status.timer` | Mỗi giờ (`*:00:00`) | Kiểm tra trạng thái connector |
+| `connector-stats.timer` | 01:00 UTC = 08:00 ICT | Thống kê ngày hôm qua |
+
+## Xem log
+
+```bash
+journalctl -u connector-status --since today
+journalctl -u connector-stats --since today
 ```

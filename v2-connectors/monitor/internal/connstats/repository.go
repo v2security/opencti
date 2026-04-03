@@ -1,16 +1,26 @@
-package es
+package connstats
 
 import (
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"connector-monitor/internal/domain"
+	"connector-monitor/internal/es"
 )
 
-// GetWorkStats fetches aggregated work statistics grouped by connector_id
+// Repo fetches work statistics from Elasticsearch.
+type Repo struct {
+	es *es.Client
+}
+
+// NewRepo creates a work statistics repository.
+func NewRepo(client *es.Client) *Repo {
+	return &Repo{es: client}
+}
+
+// GetByRange fetches aggregated work statistics grouped by connector_id
 // for works received within [from, to].
-func (c *Client) GetWorkStats(from, to time.Time) (map[string]domain.WorkStats, error) {
+func (r *Repo) GetByRange(from, to time.Time) (map[string]WorkStats, error) {
 	body := map[string]any{
 		"size": 0,
 		"query": map[string]any{
@@ -38,7 +48,7 @@ func (c *Client) GetWorkStats(from, to time.Time) (map[string]domain.WorkStats, 
 		},
 	}
 
-	res, err := c.Search("history", body)
+	res, err := r.es.Search("history", body)
 	if err != nil {
 		return nil, fmt.Errorf("get work stats: %w", err)
 	}
@@ -61,9 +71,9 @@ func (c *Client) GetWorkStats(from, to time.Time) (map[string]domain.WorkStats, 
 		return nil, fmt.Errorf("parse work aggs: %w", err)
 	}
 
-	out := make(map[string]domain.WorkStats, len(aggs.ByConnector.Buckets))
+	out := make(map[string]WorkStats, len(aggs.ByConnector.Buckets))
 	for _, b := range aggs.ByConnector.Buckets {
-		out[b.Key] = domain.WorkStats{
+		out[b.Key] = WorkStats{
 			ConnectorID: b.Key,
 			WorksCount:  b.DocCount,
 			ItemsDone:   int(b.TotalItems.Value),
