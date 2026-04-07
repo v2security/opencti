@@ -106,3 +106,11 @@ class ConnectorConfig:
                 default=30,
             )
         )
+        # Default category for root-level .txt files (e.g. mass_scanner.txt)
+        # that sit alongside the malware/malicious/suspicious folders
+        self.maltrail_root_file_label = get_config_variable(
+            "MALTRAIL_ROOT_FILE_LABEL",
+            ["maltrail", "root_file_label"],
+            config,
+            default="suspicious",
+        )

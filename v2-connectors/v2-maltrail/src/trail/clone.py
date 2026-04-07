@@ -74,6 +74,14 @@ def clone_and_rotate(repo_url: str, data_dir: str) -> CloneResult:
             continue
         shutil.copytree(src, dst, dirs_exist_ok=True)
 
+    # Copy root-level .txt files (e.g. mass_scanner.txt, mass_scanner_cidr.txt)
+    static_dir = os.path.join(clone_dir, "trails", "static")
+    if os.path.isdir(static_dir):
+        for name in os.listdir(static_dir):
+            src_file = os.path.join(static_dir, name)
+            if os.path.isfile(src_file) and name.lower().endswith(".txt"):
+                shutil.copy2(src_file, os.path.join(target_dir, name))
+
     # Clean up clone
     shutil.rmtree(clone_dir, ignore_errors=True)
 

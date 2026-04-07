@@ -17,3 +17,4 @@ maltrail:
   data_dir: "tools/.data"              # Directory for maltrail-old/ and maltrail-new/
   bundle_size: 500                     # IOCs per STIX bundle
   valid_days: 30                       # Indicator validity period (days)
+  root_file_label: "suspicious"        # Category for root-level .txt (mass_scanner.txt etc.)

@@ -33,6 +33,7 @@ def create_indicator(
     label: str,
     ioc_type: str,
     valid_days: int = 30,
+    file_tag: str = "",
 ) -> Indicator:
     """Create a STIX Indicator from a maltrail IOC.
 
@@ -41,6 +42,7 @@ def create_indicator(
         label: Trail category (malware, malicious, suspicious).
         ioc_type: 'ipv4' or 'domain'.
         valid_days: Indicator validity period in days.
+        file_tag: Semantic tag from the source filename (e.g. 'emotet', 'bad_wpad').
     """
     now = datetime.now(timezone.utc)
     valid_from = now.isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -62,9 +64,15 @@ def create_indicator(
     score = LABEL_SCORES.get(label, 50)
 
     labels = ["v2 secure", "maltrail", label]
-    description = (
-        f"Maltrail threat intelligence: {value} classified as {label}."
-    )
+
+    if file_tag:
+        description = (
+            f"Maltrail threat intelligence: {value} classified as {label} ({file_tag})."
+        )
+    else:
+        description = (
+            f"Maltrail threat intelligence: {value} classified as {label}."
+        )
 
     kwargs: dict[str, Any] = {
         "id": indicator_id,

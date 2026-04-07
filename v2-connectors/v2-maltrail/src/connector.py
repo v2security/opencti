@@ -126,7 +126,10 @@ class MaltrailConnector:
 
         # Step 3: Parse IOCs
         self.helper.connector_logger.info("Step 3/4: parse IOCs")
-        ioc_map = parse(result.new_dir, diff)
+        ioc_map = parse(
+            result.new_dir, diff,
+            root_file_label=self.cfg.maltrail_root_file_label,
+        )
 
         grouped = group_by_label(ioc_map)
         for label in TRAIL_LABELS:
@@ -217,19 +220,21 @@ class MaltrailConnector:
         entities: list[Any] = [get_author()]
         relationships: list[Any] = []
 
-        for value, label in batch:
+        for value, (category, file_tag) in batch:
             ioc_type = classify_ioc(value)
             try:
                 ind = create_indicator(
                     value=value,
-                    label=label,
+                    label=category,
                     ioc_type=ioc_type,
                     valid_days=self.cfg.maltrail_valid_days,
+                    file_tag=file_tag,
                 )
                 obs = create_observable(
                     value=value,
-                    label=label,
+                    label=category,
                     ioc_type=ioc_type,
+                    file_tag=file_tag,
                 )
                 rel = create_based_on(ind, obs)
                 entities.append(ind)

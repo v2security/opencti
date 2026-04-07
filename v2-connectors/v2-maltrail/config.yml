@@ -17,3 +17,4 @@ maltrail:
   data_dir: "tools/.data"
   bundle_size: 500
   valid_days: 30
+  root_file_label: "suspicious"         # Category for root-level .txt files (mass_scanner.txt etc.)
