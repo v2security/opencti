@@ -288,8 +288,12 @@ services:
       - CONNECTOR_NAME=NVD CVE (V2Secure)
       - CONNECTOR_SCOPE=cve
       - CONNECTOR_LOG_LEVEL=info
-      - CONNECTOR_DURATION_PERIOD=PT6H
+      - CONNECTOR_DURATION_PERIOD=P1D
+      - RELATIONSHIP_DELAY=600
       - NVD_API_KEY=${NVD_API_KEY}
+      - NVD_MAX_DATE_RANGE=7
+      - NVD_PULL_HISTORY=true
+      - NVD_HISTORY_START_YEAR=2016
     restart: always
 
   connector-v2-maltrail:
@@ -308,6 +312,7 @@ services:
       - CONNECTOR_SCOPE=indicator
       - CONNECTOR_LOG_LEVEL=info
       - CONNECTOR_DURATION_PERIOD=P1D
+      - RELATIONSHIP_DELAY=600
       - MALTRAIL_DATA_DIR=/opt/connector/data
     volumes:
       - ./.data:/opt/connector/data

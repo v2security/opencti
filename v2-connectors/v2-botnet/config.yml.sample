@@ -10,6 +10,7 @@ connector:
   scope: "indicator"
   log_level: "info"
   duration_period: "PT5M"              # ISO 8601 — every 5 minutes
+  relationship_delay: 600              # Seconds to wait before sending relationships
 
 botnet:
   storage_dir: "/opt/connector/data"   # Directory to watch for JSON files

@@ -64,6 +64,19 @@ class ConnectorConfig:
             default="P1D",
         )
 
+        # --- Relationship delay ---
+        # Seconds to wait after sending all entity bundles before sending
+        # relationship bundles. Prevents race conditions where RabbitMQ
+        # workers process relationships before entities are fully imported.
+        self.relationship_delay = int(
+            get_config_variable(
+                "RELATIONSHIP_DELAY",
+                ["connector", "relationship_delay"],
+                config,
+                default=600,
+            )
+        )
+
         # --- Maltrail ---
         self.maltrail_repo_url = get_config_variable(
             "MALTRAIL_REPO_URL",

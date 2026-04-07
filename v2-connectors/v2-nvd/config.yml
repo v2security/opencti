@@ -9,12 +9,13 @@ connector:
   name: "NVD CVE"
   scope: "cve"
   log_level: "info"
-  duration_period: "PT6H"
+  duration_period: "P1D"
+  relationship_delay: 600
 
 nvd:
   base_url: "https://services.nvd.nist.gov/rest/json/cves/2.0"
   request_timeout: 30
-  max_date_range: 120
+  max_date_range: 7
   maintain_data: true
   pull_history: true
   history_start_year: 2016

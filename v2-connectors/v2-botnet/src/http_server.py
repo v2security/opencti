@@ -6,6 +6,7 @@ import queue
 import re
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -105,14 +106,25 @@ def _handle_file(path: Path, helper: OpenCTIConnectorHelper) -> None:
             helper.connect_id,
             f"Botnet IOC ({path.name}, {built} indicators)",
         )
-        # Send entities (Indicators + Observables) first
+        # Phase 1: Send entities (Indicators + Observables) first
         helper.send_stix2_bundle(
             entities_bundle.serialize(),
             work_id=work_id,
             update=True,
         )
-        # Then send relationships — entities are already queued
+        # Phase 2: Wait for entities to be processed, then send relationships
         if rels_bundle is not None:
+            delay = int(get_config_variable(
+                "RELATIONSHIP_DELAY",
+                ["connector", "relationship_delay"],
+                _RAW_CONFIG,
+                default=60,
+            ))
+            logger.info(
+                "Worker: waiting %ds before sending relationships for %s",
+                delay, path.name,
+            )
+            time.sleep(delay)
             helper.send_stix2_bundle(
                 rels_bundle.serialize(),
                 work_id=work_id,

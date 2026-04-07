@@ -53,7 +53,7 @@ class ConnectorConfig:
             "CONNECTOR_DURATION_PERIOD",
             ["connector", "duration_period"],
             config,
-            default="PT6H",
+            default="P1D",
         )
 
         # --- NVD API (api_key from .env) ---
@@ -81,7 +81,7 @@ class ConnectorConfig:
                 "NVD_MAX_DATE_RANGE",
                 ["nvd", "max_date_range"],
                 config,
-                default=120,
+                default=7,
             )
         )
 
@@ -104,6 +104,19 @@ class ConnectorConfig:
                 ["nvd", "history_start_year"],
                 config,
                 default=2019,
+            )
+        )
+
+        # --- Relationship delay ---
+        # Seconds to wait after sending all entity bundles before sending
+        # relationship bundles. Prevents race conditions where RabbitMQ
+        # workers process relationships before entities are fully imported.
+        self.relationship_delay = int(
+            get_config_variable(
+                "RELATIONSHIP_DELAY",
+                ["connector", "relationship_delay"],
+                config,
+                default=600,
             )
         )
 

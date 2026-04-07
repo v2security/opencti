@@ -9,7 +9,8 @@ connector:
   name: "Maltrail IOC"
   scope: "indicator"
   log_level: "info"
-  duration_period: "P1D"               # ISO 8601 — every 1 day
+  duration_period: "PT1H"              # ISO 8601 — every 1 hour
+  relationship_delay: 300               # Seconds to wait before sending relationships
 
 maltrail:
   repo_url: "https://github.com/stamparm/maltrail.git"

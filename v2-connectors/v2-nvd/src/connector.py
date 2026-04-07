@@ -8,6 +8,10 @@ objects, and syncs them into OpenCTI.
 Supports two operating modes:
   - Incremental updates (maintain_data): syncs CVEs modified since last run.
   - Historical import (pull_history): pulls all CVEs from a start year.
+
+Uses two-phase bundle sending to prevent race conditions:
+  Phase 1: Send all entity bundles (Vulnerability + Software)
+  Phase 2: Wait relationship_delay seconds, then send relationship bundles
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -183,7 +188,12 @@ class NvdCveConnector:
     # ------------------------------------------------------------------
 
     def _sync_window(self, **api_kwargs) -> int:
-        """Fetch CVEs for one date window, enrich, build bundles, send."""
+        """Fetch CVEs for one date window, enrich, build bundles, send.
+
+        Uses two-phase sending to avoid race conditions:
+          Phase 1: Send all entity bundles (Vulnerability + Software)
+          Phase 2: Wait relationship_delay, then send relationship bundles
+        """
         cve_list = list(self.nvd.fetch_cves(**api_kwargs))
         if not cve_list:
             return 0
@@ -199,7 +209,10 @@ class NvdCveConnector:
             f"NVD CVE sync ({len(cve_list)} CVEs)",
         )
 
+        # --- Phase 1: Build and send entity bundles, collect relationships ---
         synced = 0
+        pending_rels: list[str] = []  # serialized relationship bundles
+
         for cve_data in cve_list:
             cve_id = cve_data.get("id", "unknown")
             try:
@@ -208,23 +221,36 @@ class NvdCveConnector:
                 )
                 if entities_bundle is None:
                     continue
-                # Send entities (Vulnerability + Software) first
                 self.helper.send_stix2_bundle(
                     entities_bundle.serialize(),
                     work_id=work_id,
                     update=True,
                 )
-                # Then send relationships — entities are already queued
                 if rels_bundle is not None:
-                    self.helper.send_stix2_bundle(
-                        rels_bundle.serialize(),
-                        work_id=work_id,
-                        update=True,
-                    )
+                    pending_rels.append(rels_bundle.serialize())
                 synced += 1
             except Exception:
                 self.helper.connector_logger.error(
                     f"Failed to sync {cve_id}"
+                )
+
+        # --- Phase 2: Wait for entities to be processed, then send relationships ---
+        if pending_rels:
+            delay = self.cfg.relationship_delay
+            self.helper.connector_logger.info(
+                f"Phase 1 done: {synced} entity bundles sent. "
+                f"Waiting {delay}s before sending {len(pending_rels)} relationship bundles…"
+            )
+            time.sleep(delay)
+
+            self.helper.connector_logger.info(
+                f"Phase 2: sending {len(pending_rels)} relationship bundles"
+            )
+            for rels_data in pending_rels:
+                self.helper.send_stix2_bundle(
+                    rels_data,
+                    work_id=work_id,
+                    update=True,
                 )
 
         message = f"Synced {synced}/{len(cve_list)} CVEs"

@@ -2,35 +2,27 @@
 
 Custom connector đồng bộ IOC (IP, Domain) từ [maltrail](https://github.com/stamparm/maltrail/) vào OpenCTI.
 
-Chạy mỗi ngày 1 lần, clone repo maltrail, so sánh thay đổi, parse IOC rồi tạo STIX Indicator push vào OpenCTI.
-
-## Luồng xử lý
+## Cách chạy (Two-Phase Push)
 
 ```
-Step 1: Clone + Rotate
-  rm maltrail-old/ → mv maltrail-new/ maltrail-old/ → git clone → maltrail-new/
-  Dữ liệu lưu tại DATA_DIR (default: tools/.data)
-
-Step 2: Compare (SHA256)
-  For each .txt: size check → SHA256 hash → changed list
-
-Step 3: Parse IOCs
-  Changed files → clean lines (strip #, //, ports, CIDR) → map[value]label
-
-Step 4: Create STIX Indicators + Observables
-  IP  → Indicator [ipv4-addr:value = '...'] + IPv4-Addr Observable
-  Domain → Indicator [domain-name:value = '...'] + Domain-Name Observable
-  → send_stix2_bundle() ──publish──→ RabbitMQ
-  → OpenCTI worker consume từ queue ──→ import vào OpenCTI
+1. Clone repo maltrail mới, so sánh SHA256 với bản cũ → danh sách file thay đổi
+2. Parse IOC từ file thay đổi (IP + Domain), gom theo batch 500
+3. Phase 1: Push N entity bundles (Indicator + Observable) → RabbitMQ
+4. Đợi 600s (10 phút) — chờ worker import hết entity
+5. Phase 2: Push relationship bundles (Indicator → based-on → Observable)
+6. Chu kỳ: 1 ngày (P1D) — xong rồi đợi 24h chạy lại
 ```
+
+**Ví dụ thực tế:** Lần đầu chạy → ~12.000 entity bundles → đợi 600s → ~24 relationship bundles. Các lần sau chỉ sync file thay đổi → ít hơn nhiều.
 
 ## STIX Output
 
-Mỗi IOC → 1 STIX `Indicator` + 1 Observable + 1 Relationship (based-on):
-- Pattern: `[ipv4-addr:value = '<ip>']` hoặc `[domain-name:value = '<domain>']`
-- Labels: `v2 secure`, `maltrail`, `<category>` (malware/malicious/suspicious)
-- Score: malware=90, malicious=70, suspicious=50
-- Valid 30 ngày từ thời điểm sync
+Mỗi IOC → 1 entity bundle + relationship bundle (gom theo batch):
+- `Indicator`: pattern `[ipv4-addr:value = '...']` hoặc `[domain-name:value = '...']`
+- `Observable`: IPv4-Addr hoặc Domain-Name
+- `Relationship`: Indicator → based-on → Observable
+- Labels: `v2 secure`, `maltrail`, `<category>` (malware=90, malicious=70, suspicious=50)
+- Valid 30 ngày
 
 ## Cấu trúc
 
@@ -60,15 +52,14 @@ v2-maltrail/
 | `OPENCTI_URL` | — | URL OpenCTI (bắt buộc) |
 | `OPENCTI_TOKEN` | — | API token (bắt buộc) |
 | `CONNECTOR_ID` | — | UUID connector (bắt buộc) |
-| `CONNECTOR_DURATION_PERIOD` | `P1D` | Chu kỳ sync (ISO 8601, mỗi ngày) |
+| `CONNECTOR_DURATION_PERIOD` | `P1D` | Chu kỳ sync (mỗi ngày) |
+| `RELATIONSHIP_DELAY` | `600` | Giây đợi giữa Phase 1 và Phase 2 |
 | `MALTRAIL_DATA_DIR` | `tools/.data` | Thư mục lưu maltrail-old/maltrail-new |
 | `MALTRAIL_REPO_URL` | `https://github.com/stamparm/maltrail.git` | Maltrail git repo |
-| `MALTRAIL_BUNDLE_SIZE` | `500` | Số IOC mỗi bundle gửi OpenCTI |
+| `MALTRAIL_BUNDLE_SIZE` | `500` | Số IOC mỗi bundle |
 | `MALTRAIL_VALID_DAYS` | `30` | Số ngày indicator còn hiệu lực |
 
 ## Requirements
 
-- Python 3.12
-- OpenCTI >= 6.x, < 7
-- `pycti[connector]>=6.0.0,<7`
+- Python 3.12, OpenCTI >= 6.x < 7, `pycti[connector]>=6.0.0,<7`
 - `git` phải có trong PATH

@@ -9,12 +9,13 @@ connector:
   name: "NVD CVE"
   scope: "cve"
   log_level: "info"
-  duration_period: "PT6H"              # ISO 8601 — every 6 hours
+  duration_period: "P1D"                # ISO 8601 — every day
+  relationship_delay: 600               # Seconds to wait before sending relationships
 
 nvd:
   base_url: "https://services.nvd.nist.gov/rest/json/cves/2.0"
   request_timeout: 30                  # Per-request timeout (seconds)
-  max_date_range: 120                  # Max days per API query (NVD limit: 120)
+  max_date_range: 7                    # Max days per API window (keep small to avoid race conditions)
   maintain_data: true                  # Incremental: sync CVEs since last run
   pull_history: false                  # Historical: pull all CVEs from start year
   history_start_year: 2019             # Minimum 1999; CVSS v3.1 starts at 2019

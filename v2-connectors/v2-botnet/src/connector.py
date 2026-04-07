@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 import yaml
@@ -61,6 +62,15 @@ class BotnetConnector:
             default="PT5M",
         )
 
+        self.relationship_delay = int(
+            get_config_variable(
+                "RELATIONSHIP_DELAY",
+                ["connector", "relationship_delay"],
+                raw_config,
+                default=600,
+            )
+        )
+
     def process_data(self) -> None:
         self.helper.connector_logger.info("Botnet connector: starting sync cycle")
 
@@ -77,15 +87,40 @@ class BotnetConnector:
             )
             return
 
+        # Two-phase sending: collect all relationship bundles across files,
+        # send them after a delay to let entities be processed first.
+        pending_rels: list[tuple[str, str]] = []  # (work_id, serialized_bundle)
+
         for json_file in json_files:
             try:
-                self._process_file(json_file)
+                rels = self._process_file(json_file)
+                pending_rels.extend(rels)
             except Exception:
                 self.helper.connector_logger.error(
                     f"Failed to process file {json_file.name}"
                 )
 
-    def _process_file(self, json_file: Path) -> None:
+        if pending_rels:
+            delay = self.relationship_delay
+            self.helper.connector_logger.info(
+                f"Phase 1 done. Waiting {delay}s before sending "
+                f"{len(pending_rels)} relationship bundles…"
+            )
+            time.sleep(delay)
+
+            self.helper.connector_logger.info(
+                f"Phase 2: sending {len(pending_rels)} relationship bundles"
+            )
+            for work_id, rels_data in pending_rels:
+                self.helper.send_stix2_bundle(
+                    rels_data,
+                    work_id=work_id,
+                    update=True,
+                )
+
+    def _process_file(self, json_file: Path) -> list[tuple[str, str]]:
+        """Process one JSON file. Returns list of (work_id, rels_bundle_json)
+        for deferred relationship sending."""
         self.helper.connector_logger.info(f"Processing file: {json_file.name}")
 
         try:
@@ -96,7 +131,7 @@ class BotnetConnector:
                 f"Malformed JSON in {json_file.name} — deleting"
             )
             json_file.unlink(missing_ok=True)
-            return
+            return []
 
         events = parse_file(data)
         if not events:
@@ -104,7 +139,7 @@ class BotnetConnector:
                 f"No events found in {json_file.name}"
             )
             json_file.unlink(missing_ok=True)
-            return
+            return []
 
         work_id = self.helper.api.work.initiate_work(
             self.helper.connect_id,
@@ -117,26 +152,24 @@ class BotnetConnector:
             self.helper.api.work.to_processed(work_id, message)
             self.helper.connector_logger.info(message)
             json_file.unlink(missing_ok=True)
-            return
+            return []
 
-        # Send entities (Indicators + Observables) first
+        # Phase 1: Send entities now
         self.helper.send_stix2_bundle(
             entities_bundle.serialize(),
             work_id=work_id,
             update=True,
         )
-        # Then send relationships — entities are already queued
-        if rels_bundle is not None:
-            self.helper.send_stix2_bundle(
-                rels_bundle.serialize(),
-                work_id=work_id,
-                update=True,
-            )
 
         message = f"Synced {synced}/{len(events)} indicators from {json_file.name}"
         self.helper.api.work.to_processed(work_id, message)
         self.helper.connector_logger.info(message)
         json_file.unlink(missing_ok=True)
+
+        # Collect relationships for deferred sending
+        if rels_bundle is not None:
+            return [(work_id, rels_bundle.serialize())]
+        return []
 
     def start(self) -> None:
         self.helper.schedule_iso(

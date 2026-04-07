@@ -10,6 +10,7 @@ connector:
   scope: "indicator"
   log_level: "info"
   duration_period: "P1D"
+  relationship_delay: 600
 
 maltrail:
   repo_url: "https://github.com/stamparm/maltrail.git"

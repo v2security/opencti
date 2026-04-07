@@ -10,6 +10,7 @@ connector:
   scope: "indicator"
   log_level: "info"
   duration_period: "PT5M"
+  relationship_delay: 600
 
 botnet:
   storage_dir: "/opt/connector/data"
