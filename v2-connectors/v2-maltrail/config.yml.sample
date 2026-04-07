@@ -1,0 +1,18 @@
+# Maltrail IOC Connector — non-sensitive settings only.
+# Secrets (OPENCTI_TOKEN, CONNECTOR_ID) come from .env or env vars.
+
+opencti:
+  url: "http://localhost:8080"
+
+connector:
+  type: "EXTERNAL_IMPORT"
+  name: "Maltrail IOC"
+  scope: "indicator"
+  log_level: "info"
+  duration_period: "P1D"               # ISO 8601 — every 1 day
+
+maltrail:
+  repo_url: "https://github.com/stamparm/maltrail.git"
+  data_dir: "tools/.data"              # Directory for maltrail-old/ and maltrail-new/
+  bundle_size: 500                     # IOCs per STIX bundle
+  valid_days: 30                       # Indicator validity period (days)

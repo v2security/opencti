@@ -292,6 +292,27 @@ services:
       - NVD_API_KEY=${NVD_API_KEY}
     restart: always
 
+  connector-v2-maltrail:
+    build:
+      context: ./v2-maltrail
+      dockerfile: Dockerfile
+    image: v2-connector/maltrail:latest
+    container_name: connector-v2-maltrail
+    network_mode: host
+    environment:
+      - OPENCTI_URL=http://localhost:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_V2_MALTRAIL_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=Maltrail IOC (V2Secure)
+      - CONNECTOR_SCOPE=indicator
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=P1D
+      - MALTRAIL_DATA_DIR=/opt/connector/data
+    volumes:
+      - ./.data:/opt/connector/data
+    restart: always
+
   connector-v2-botnet:
     build:
       context: ./v2-botnet

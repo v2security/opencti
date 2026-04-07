@@ -8,10 +8,10 @@
 ###############################################################################
 
 COMPOSE = docker compose -f docker-compose-connector.yml
-CUSTOM_SERVICES = connector-v2-nvd connector-v2-botnet
+CUSTOM_SERVICES = connector-v2-nvd connector-v2-botnet connector-v2-maltrail
 
 .PHONY: help start stop restart build start-custom stop-custom restart-custom \
-        status logs clean
+        status logs clean prune
 
 ## ─── ALL CONNECTORS ──────────────────────
 
@@ -49,8 +49,11 @@ logs: ## Follow logs of all connectors
 
 ## ─── CLEANUP ─────────────────────────────
 
+prune: ## Xóa tất cả unused images
+	docker image prune -a -f
+
 clean: ## Remove custom connector images
-	docker rmi v2-connector/nvd-cve:latest v2-connector/botnet:latest 2>/dev/null || true
+	docker rmi v2-connector/nvd-cve:latest v2-connector/botnet:latest v2-connector/maltrail:latest 2>/dev/null || true
 
 ## ─── HELP ────────────────────────────────
 
