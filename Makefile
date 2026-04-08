@@ -16,8 +16,8 @@ export
 env: 
 	cp .env /etc/saids/opencti
 	cp .env opencti-deploy-offline/config
-	cp .env.example /etc/saids/opencti
-	cp .env.example opencti-deploy-offline/config
+	cp .env.sample /etc/saids/opencti
+	cp .env.sample opencti-deploy-offline/config
 
 start: ## Start stack (infra + opencti + worker)
 	docker compose up -d
@@ -62,15 +62,15 @@ health: ## Health check
 
 ## ─── CLEANUP ─────────────────────────────
 
+prune: ## Xóa tất cả unused images
+	docker image prune -a -f
+
 clean: ## Xóa dangling images + build cache
 	docker image prune -f && docker builder prune -f
 
 destroy: ## Xóa tất cả + volumes (⚠️ MẤT DATA)
 	@read -p "⚠️  Xóa hết data? (y/N): " c && [ "$$c" = "y" ] || exit 1
 	docker compose down -v
-
-prune: ## Xóa tất cả unused images
-	docker image prune -a -f
 
 ## ─── INFO ────────────────────────────────
 

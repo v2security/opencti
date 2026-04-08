@@ -116,7 +116,7 @@ log "  ✓ /etc/rabbitmq/"
 cp -f config/logrotate.conf /etc/logrotate.d/opencti
 log "  ✓ /etc/logrotate.d/opencti"
 
-# .env + .env.example → /etc/saids/opencti/
+# .env + .env.sample → /etc/saids/opencti/
 mkdir -p /etc/saids/opencti
 if [[ ! -f /etc/saids/opencti/.env ]]; then
     cp -f config/.env /etc/saids/opencti/.env
@@ -124,8 +124,8 @@ if [[ ! -f /etc/saids/opencti/.env ]]; then
 else
     log "  ⏭  /etc/saids/opencti/.env đã tồn tại — giữ nguyên"
 fi
-cp -f config/.env.example /etc/saids/opencti/.env.example
-log "  ✓ config/.env.example → /etc/saids/opencti/.env.example"
+cp -f config/.env.sample /etc/saids/opencti/.env.sample
+log "  ✓ config/.env.sample → /etc/saids/opencti/.env.sample"
 
 rm -rf config/
 log "  ✓ config/ cleaned up"
@@ -157,7 +157,7 @@ rsync -a \
     --exclude='__pycache__' \
     --exclude='v2_*.sh' \
     --exclude='.env' \
-    --exclude='.env.example' \
+    --exclude='.env.sample' \
     opencti/ /etc/saids/opencti/
 log "  ✓ Platform files → /etc/saids/opencti/ (không có v2_*.sh, .env)"
 

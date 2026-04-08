@@ -64,7 +64,7 @@ SQL migrations are embedded into the binary via `go:embed` — chỉ cần deplo
 
 ```bash
 # 1. Config
-cp .env.example .env    # hoặc edit .env trực tiếp
+cp .env.sample .env    # hoặc edit .env trực tiếp
 vi .env                 # fill MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
 
 # 2. Build → deploy/

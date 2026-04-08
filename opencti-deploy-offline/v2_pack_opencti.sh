@@ -79,7 +79,7 @@ check_file "opencti-worker/v2_uninstall_opencti_worker.sh"
 log ""
 log "── Config + Systemd ──"
 check_file "config/.env"
-for f in config/.env.example \
+for f in config/.env.sample \
          config/redis.conf config/minio.conf config/rabbitmq.conf config/rabbitmq-env.conf \
          config/enabled_plugins config/elasticsearch.yml config/logrotate.conf config/check_indicator.py \
          systemd/minio.service systemd/rabbitmq.service systemd/opencti-platform.service systemd/opencti-worker@.service; do

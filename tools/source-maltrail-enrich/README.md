@@ -18,7 +18,7 @@ source-maltrail-sync/
 │   │   └── fs.go                   # Filesystem helpers
 │   └── store/
 │       └── mysql.go                # Batch UPDATE ids_blacklist
-├── .env.example                    # Config template
+├── .env.sample                    # Config template
 ├── go.mod / go.sum
 └── deploy/                         # ← Build output + systemd
     ├── v2-ioc-maltrail-sync        # Binary (built by make)
@@ -47,7 +47,7 @@ Step 4: Update MySQL
 
 ```bash
 # 1. Config
-cp .env.example .env
+cp .env.sample .env
 vi .env   # fill MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE
 
 # 2. Build → deploy/

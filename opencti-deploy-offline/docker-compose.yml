@@ -80,7 +80,7 @@ services:
       # ══════════════════════════════════════════════════════════
       # Shared .env — config tập trung cho Platform + Worker + Tools
       # Mount .env thật từ root repo để test với credential thật
-      # Trên bare-metal, v2_unpack_opencti.sh copy .env.example → .env
+      # Trên bare-metal, v2_unpack_opencti.sh copy .env.sample → .env
       # ══════════════════════════════════════════════════════════
       - ./config/.env:/etc/saids/opencti/.env
 
