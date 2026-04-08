@@ -45,10 +45,11 @@ nginx/
 
 ## Certificates
 
+- Nginx dùng **server certificate** để TLS termination — client chỉ cần kết nối HTTPS, **không cần client certificate**.
 - Nginx đọc certificate từ `nginx/certs/`.
 - Hiện tại các proxy dùng tên generic:
-  - `/etc/nginx/certs/tls.crt`
-  - `/etc/nginx/certs/tls.key`
+  - `/etc/nginx/certs/cert.pem` — server certificate (public)
+  - `/etc/nginx/certs/key.pem` — private key
 - Thư mục này được mount read-only vào container.
 - Không commit private key thật vào git.
 - Nếu chưa có cert chính thức, có thể tạo self-signed cert nhanh bằng:

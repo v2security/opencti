@@ -25,6 +25,9 @@ Connector gửi bundle theo 2 pha để tránh race condition (worker xử lý r
 
 **Historical:** Tất cả window chạy liên tục trong 1 cycle (chỉ nghỉ 600s giữa Phase 1 và Phase 2 mỗi window). Sau khi import hết lịch sử → đợi 1 ngày → chạy lại (lúc này chỉ có CVE mới).
 
+`maintain_data: true`: Connector **không ghi file nào ra disk cả**. Toàn bộ dữ liệu (Vulnerability, Software, Relationship) được gửi thẳng vào OpenCTI qua `helper.send_stix2_bundle()`. State (timestamp lần chạy cuối) cũng lưu trong database OpenCTI qua `helper.get_state()`/`set_state()`, không phải file local.
+
+
 ## STIX Output
 
 Mỗi CVE → 1 entity bundle + 1 relationship bundle:

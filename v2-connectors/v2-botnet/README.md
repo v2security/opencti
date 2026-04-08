@@ -30,12 +30,18 @@ Có 2 luồng nhận file, đều dùng two-phase push:
 
 ```bash
 # Upload file
-curl -k -X POST http://localhost:20000/api/v1/files \
+curl -X POST http://localhost:20000/api/v1/files \
   -H "X-Api-Key: ChangeMe" \
   -F "file=@botnet.json"
 
-# Qua Nginx (HTTPS)
+# Qua Nginx (HTTPS) — self-signed cert, dùng -k để skip verify
 curl -k -X POST https://localhost:21000/api/v1/files \
+  -H "X-Api-Key: ChangeMe" \
+  -F "file=@botnet.json"
+
+# Hoặc verify đúng cert
+curl --cacert /path/to/nginx/certs/cert.pem \
+  -X POST https://localhost:21000/api/v1/files \
   -H "X-Api-Key: ChangeMe" \
   -F "file=@botnet.json"
 ```
