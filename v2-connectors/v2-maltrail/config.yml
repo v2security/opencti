@@ -6,7 +6,7 @@ opencti:
 
 connector:
   type: "EXTERNAL_IMPORT"
-  name: "Maltrail IOC"
+  name: "Maltrail IOC (V2Secure)"
   scope: "indicator"
   log_level: "info"
   duration_period: "P1D"
@@ -14,7 +14,7 @@ connector:
 
 maltrail:
   repo_url: "https://github.com/stamparm/maltrail.git"
-  data_dir: "tools/.data"
+  data_dir: "/opt/connector/data"
   bundle_size: 500
   valid_days: 30
   root_file_label: "suspicious"         # Category for root-level .txt files (mass_scanner.txt etc.)

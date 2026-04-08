@@ -77,7 +77,7 @@ def _build_opencti_config() -> dict:
 _DEFAULT_DATA_DIR = Path(
     get_config_variable(
         "STORAGE_DIR", ["botnet", "storage_dir"], _RAW_CONFIG,
-        default=str(Path(__file__).resolve().parents[2] / "data" / "botnet"),
+        default="/opt/connector/data",
     )
 )
 

@@ -12,16 +12,16 @@ Usage:
     python dev_run.py CVE-2025-15112 --dry-run
 
     # Load from local JSON file instead of NVD API:
-    python dev_run.py CVE-2025-15112 --file ../.data/nvd-cve/nvd_cve_20260311.json
+    python dev_run.py CVE-2025-15112 --file ../.data/nvd_cve_20260311.json
 
     # Combine: local file + dry run:
-    python dev_run.py CVE-2025-15112 --file ../.data/nvd-cve/nvd_cve_20260311.json --dry-run
+    python dev_run.py CVE-2025-15112 --file ../.data/nvd_cve_20260311.json --dry-run
 
     # Process ALL CVEs in a local JSON file (dry run):
-    python dev_run.py --file-all ../../.data/nvd-cve/nvd_cve_20260311.json --dry-run
+    python dev_run.py --file-all ../.data/nvd_cve_20260311.json --dry-run
 
     # Process ALL CVEs in a file and send to OpenCTI:
-    python dev_run.py --file-all ../../.data/nvd-cve/nvd_cve_20260311.json
+    python dev_run.py --file-all ../.data/nvd_cve_20260311.json
 """
 
 from __future__ import annotations

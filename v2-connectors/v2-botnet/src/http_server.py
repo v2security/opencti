@@ -159,7 +159,7 @@ class ServerConfig:
 
     @staticmethod
     def from_config() -> "ServerConfig":
-        default_storage_dir = str(Path(__file__).resolve().parents[2] / "data" / "botnet")
+        default_storage_dir = "/opt/connector/data"
 
         raw_ext = get_config_variable(
             "ALLOWED_EXTENSIONS", ["http_server", "allowed_extensions"], _RAW_CONFIG, default=""

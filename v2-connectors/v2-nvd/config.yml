@@ -6,7 +6,7 @@ opencti:
 
 connector:
   type: "EXTERNAL_IMPORT"
-  name: "NVD CVE"
+  name: "NVD CVE (V2Secure)"
   scope: "cve"
   log_level: "info"
   duration_period: "P1D"
@@ -18,7 +18,7 @@ nvd:
   max_date_range: 7
   maintain_data: true
   pull_history: true
-  history_start_year: 2016
+  history_start_year: 2002
 
 epss:
   enabled: true

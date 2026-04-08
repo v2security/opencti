@@ -4,10 +4,21 @@ import json
 import time
 import requests
 from datetime import datetime, timedelta
+from pathlib import Path
 
-API_KEY = "76654363-9199-4363-8ddb-5e44094a8b28"
+try:
+    from dotenv import load_dotenv
+    _env = Path(__file__).resolve().parent.parent / ".env"
+    if _env.is_file():
+        load_dotenv(_env, override=False)
+except ImportError:
+    pass
 
-OUTPUT_DIR = "/workspace/tunv_opencti/tools/data/nvd-cve"
+API_KEY = os.environ.get("NVD_API_KEY", "")
+if not API_KEY:
+    raise SystemExit("NVD_API_KEY not set. Export it or add to v2-connectors/.env")
+
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".data")
 BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
 

@@ -88,7 +88,7 @@ class ConnectorConfig:
             "MALTRAIL_DATA_DIR",
             ["maltrail", "data_dir"],
             config,
-            default="tools/.data",
+            default="/opt/connector/data",
         )
         self.maltrail_bundle_size = int(
             get_config_variable(

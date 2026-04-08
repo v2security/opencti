@@ -281,19 +281,11 @@ services:
     container_name: connector-v2-nvd
     network_mode: host
     environment:
-      - OPENCTI_URL=http://localhost:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
       - CONNECTOR_ID=${CONNECTOR_V2_NVD_ID}
-      - CONNECTOR_TYPE=EXTERNAL_IMPORT
-      - CONNECTOR_NAME=NVD CVE (V2Secure)
-      - CONNECTOR_SCOPE=cve
-      - CONNECTOR_LOG_LEVEL=info
-      - CONNECTOR_DURATION_PERIOD=P1D
-      - RELATIONSHIP_DELAY=600
       - NVD_API_KEY=${NVD_API_KEY}
-      - NVD_MAX_DATE_RANGE=7
-      - NVD_PULL_HISTORY=true
-      - NVD_HISTORY_START_YEAR=2016
+    volumes:
+      - /opt/connector/data/nvd:/opt/connector/data
     restart: always
 
   connector-v2-maltrail:
@@ -304,18 +296,10 @@ services:
     container_name: connector-v2-maltrail
     network_mode: host
     environment:
-      - OPENCTI_URL=http://localhost:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
       - CONNECTOR_ID=${CONNECTOR_V2_MALTRAIL_ID}
-      - CONNECTOR_TYPE=EXTERNAL_IMPORT
-      - CONNECTOR_NAME=Maltrail IOC (V2Secure)
-      - CONNECTOR_SCOPE=indicator
-      - CONNECTOR_LOG_LEVEL=info
-      - CONNECTOR_DURATION_PERIOD=P1D
-      - RELATIONSHIP_DELAY=600
-      - MALTRAIL_DATA_DIR=/opt/connector/data
     volumes:
-      - ./.data:/opt/connector/data
+      - /opt/connector/data/maltrail:/opt/connector/data
     restart: always
 
   connector-v2-botnet:
@@ -326,15 +310,8 @@ services:
     container_name: connector-v2-botnet
     network_mode: host
     environment:
-      - OPENCTI_URL=http://localhost:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
       - CONNECTOR_ID=${CONNECTOR_V2_BOTNET_ID}
-      - CONNECTOR_TYPE=EXTERNAL_IMPORT
-      - CONNECTOR_NAME=Botnet IOC (V2Secure)
-      - CONNECTOR_SCOPE=indicator
-      - CONNECTOR_LOG_LEVEL=info
-      - PORT=20000
-      - STORAGE_DIR=${BOTNET_STORAGE_DIR}
       - AUTH_TOKEN=${BOTNET_HTTP_API_KEY}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:20000/healthz', timeout=5)"]
@@ -343,7 +320,7 @@ services:
       retries: 3
       start_period: 20s
     volumes:
-      - ./.data/botnet:/opt/connector/data
+      - /opt/connector/data/botnet:/opt/connector/data
     restart: always
 
   reverse-proxy-connectors:

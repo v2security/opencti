@@ -6,7 +6,7 @@ opencti:
 
 connector:
   type: "EXTERNAL_IMPORT"
-  name: "Botnet IOC"
+  name: "Botnet IOC (V2Secure)"
   scope: "indicator"
   log_level: "info"
   duration_period: "PT5M"

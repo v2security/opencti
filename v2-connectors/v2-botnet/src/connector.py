@@ -43,9 +43,7 @@ class BotnetConnector:
 
         self.helper = OpenCTIConnectorHelper(raw_config)
 
-        default_storage = str(
-            Path(__file__).resolve().parents[2] / "data" / "botnet"
-        )
+        default_storage = "/opt/connector/data"
         self.storage_dir = Path(
             get_config_variable(
                 "STORAGE_DIR",
