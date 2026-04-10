@@ -28,7 +28,7 @@ cd runtime && bash v2-build-python.sh
 cd runtime && bash v2-build-nodejs.sh
 
 # Đảm bảo có sẵn:
-#   rpms/*.rpm (~126 files)
+#   rpms/*.rpm (~127 files, bao gồm rsync)
 #   minio/minio, minio/mc
 #   rabbitmq/rabbitmq-server-generic-unix-*.tar.xz
 ```

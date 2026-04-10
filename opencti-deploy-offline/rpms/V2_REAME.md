@@ -118,6 +118,7 @@ systemd-252-55.el9_7.7.rocky.0.1.x86_64.rpm
 systemd-libs-252-55.el9_7.7.rocky.0.1.x86_64.rpm
 systemd-pam-252-55.el9_7.7.rocky.0.1.x86_64.rpm
 systemd-rpm-macros-252-55.el9_7.7.rocky.0.1.noarch.rpm
+rsync-3.2.5-3.el9.x86_64.rpm
 tar-1.34-9.el9_7.x86_64.rpm
 tzdata-2025c-1.el9.noarch.rpm
 util-linux-2.37.4-21.el9.x86_64.rpm
