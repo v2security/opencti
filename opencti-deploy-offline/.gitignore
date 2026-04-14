@@ -4,9 +4,9 @@ output/
 # SSL certificates (contain private keys — NEVER commit)
 cert/
 
-# Start scripts (contains secrets — NEVER commit)
-opencti/v2_start_opencti.sh
-opencti-worker/v2_start_opencti_worker.sh
+# Start scripts (template — reads secrets from .env at runtime, safe to commit)
+# opencti/v2_start_opencti.sh          # UN-IGNORED: no embedded secrets
+# opencti-worker/v2_start_opencti_worker.sh # UN-IGNORED: no embedded secrets
 
 # Offline deploy archives
 opencti-offline-deploy.tar.gz
