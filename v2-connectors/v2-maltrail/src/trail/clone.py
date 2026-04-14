@@ -15,7 +15,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from config import TRAIL_LABELS
+from config import TRAIL_FOLDERS
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ def clone_and_rotate(repo_url: str, data_dir: str) -> CloneResult:
     )
 
     # Copy trail categories from clone into target
-    for label in TRAIL_LABELS:
+    for label in TRAIL_FOLDERS:
         src = os.path.join(clone_dir, "trails", "static", label)
         dst = os.path.join(target_dir, label)
         if not os.path.isdir(src):

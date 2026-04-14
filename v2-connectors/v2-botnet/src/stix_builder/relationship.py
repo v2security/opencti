@@ -21,6 +21,6 @@ def create_based_on(indicator: Indicator, observable: IPv4Address) -> Relationsh
         target_ref=observable.id,
         created_by_ref=get_author().id,
         confidence=100,
-        labels=["v2 secure"],
+        labels=["v2secure", "v2-botnet", "src-ioc", "src.bot"],
         allow_custom=True,
     )

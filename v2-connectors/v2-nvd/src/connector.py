@@ -291,7 +291,7 @@ class NvdCveConnector:
 
         # Tag vulnerability as having relationships if any software was linked
         if relationships:
-            vuln = vuln.new_version(labels=list(vuln.get("labels", [])) + ["has-relationships"])
+            vuln = vuln.new_version(labels=list(vuln.get("labels", [])) + ["has-rel"])
             entities[1] = vuln
 
         entities_bundle = Bundle(objects=entities, allow_custom=True)

@@ -18,13 +18,16 @@ def create_relationship(
     relationship description so that the hardware context from NVD AND
     configurations is preserved.
     """
+    labels = ["v2secure", "v2-nvd"]
+    if hardware_cpes:
+        labels.append("hardware-dependent")
     kwargs: dict = {
         "relationship_type": "has",
         "source_ref": software.id,
         "target_ref": vuln.id,
         "created_by_ref": get_author().id,
         "confidence": 100,
-        "labels": ["v2 secure"],
+        "labels": labels,
         "allow_custom": True,
     }
     if hardware_cpes:

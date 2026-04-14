@@ -44,10 +44,10 @@ _find_and_load_env()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import ConnectorConfig, TRAIL_LABELS
+from config import ConnectorConfig
 from trail.clone import clone_and_rotate
 from trail.compare import compare
-from trail.parser import classify_ioc, group_by_label, parse
+from trail.parser import IOCEntry, classify_ioc, group_by_group, parse
 from stix_builders.indicator import create_indicator, get_author
 from stix_builders.observable import create_observable
 from stix_builders.relationship import create_based_on
@@ -131,10 +131,10 @@ class MaltrailConnector:
             root_file_label=self.cfg.maltrail_root_file_label,
         )
 
-        grouped = group_by_label(ioc_map)
-        for label in TRAIL_LABELS:
+        grouped = group_by_group(ioc_map)
+        for group, values in sorted(grouped.items()):
             self.helper.connector_logger.info(
-                f"Parsed: label={label}, count={len(grouped[label])}"
+                f"Parsed: group={group}, count={len(values)}"
             )
 
         if len(ioc_map) == 0:
@@ -151,7 +151,7 @@ class MaltrailConnector:
     # STIX bundle creation and push
     # ------------------------------------------------------------------
 
-    def _push_iocs(self, ioc_map: dict[str, str]) -> None:
+    def _push_iocs(self, ioc_map: dict[str, IOCEntry]) -> None:
         """Build STIX bundles and send to OpenCTI in batches.
 
         Uses two-phase sending:
@@ -210,7 +210,7 @@ class MaltrailConnector:
         self.helper.connector_logger.info(message)
 
     def _build_bundles(
-        self, batch: list[tuple[str, str]]
+        self, batch: list[tuple[str, IOCEntry]]
     ) -> tuple[Bundle | None, Bundle | None, int]:
         """Build STIX2 Bundles from a batch of IOCs.
 
@@ -220,23 +220,23 @@ class MaltrailConnector:
         entities: list[Any] = [get_author()]
         relationships: list[Any] = []
 
-        for value, (category, file_tag) in batch:
+        for value, entry in batch:
             ioc_type = classify_ioc(value)
             try:
                 ind = create_indicator(
                     value=value,
-                    label=category,
+                    info=entry.info,
                     ioc_type=ioc_type,
                     valid_days=self.cfg.maltrail_valid_days,
-                    file_tag=file_tag,
+                    file_tag=entry.file_tag,
                 )
                 obs = create_observable(
                     value=value,
-                    label=category,
+                    info=entry.info,
                     ioc_type=ioc_type,
-                    file_tag=file_tag,
+                    file_tag=entry.file_tag,
                 )
-                rel = create_based_on(ind, obs)
+                rel = create_based_on(ind, obs, entry.info)
                 entities.append(ind)
                 entities.append(obs)
                 relationships.append(rel)

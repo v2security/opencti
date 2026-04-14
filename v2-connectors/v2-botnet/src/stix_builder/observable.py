@@ -32,7 +32,7 @@ def create_observable(parsed: dict) -> IPv4Address | None:
         "value": source_ip,
         "created_by_ref": get_author().id,
         "allow_custom": True,
-        "labels": ["v2 secure"],
+        "labels": ["v2secure", "v2-botnet", "src-ioc", "src.bot"],
         "x_opencti_score": 100,
         "x_opencti_description": json.dumps(source_json, ensure_ascii=False),
     }

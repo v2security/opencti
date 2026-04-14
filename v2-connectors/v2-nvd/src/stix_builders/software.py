@@ -23,7 +23,7 @@ def create_software(cpe_match: dict) -> Software:
     kwargs: dict[str, Any] = {
         "name": name,
         "cpe": cpe_string,
-        "labels": ["v2 secure", "has-relationships"],
+        "labels": ["v2secure", "v2-nvd", "has-rel"],
         "allow_custom": True,
     }
     if vendor:

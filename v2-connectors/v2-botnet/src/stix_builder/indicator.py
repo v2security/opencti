@@ -21,8 +21,8 @@ except ImportError:
 STIX_NAMESPACE = uuid.UUID("b1a2c3d4-e5f6-7890-abcd-ef1234567890")
 
 _AUTHOR = Identity(
-    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "V2 Secure")),
-    name="V2 Secure",
+    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "v2secure")),
+    name="v2secure",
     identity_class="organization",
 )
 
@@ -111,7 +111,7 @@ def create_indicator(parsed: dict) -> Indicator | None:
     _dedup_key = event_id or (f"{source_ip}:{timestamp}" if timestamp else f"{source_ip}:{malware_family}" if malware_family else source_ip)
     indicator_id = "indicator--" + str(uuid.uuid5(STIX_NAMESPACE, _dedup_key))
 
-    labels = ["v2 secure", "botnet"]
+    labels = ["v2secure", "v2-botnet", "src-ioc", "src.bot"]
     if malware_family:
         labels.append(f"malware-family:{malware_family}")
     malware_variant = parsed.get("malware_variant", "")
@@ -122,7 +122,7 @@ def create_indicator(parsed: dict) -> Indicator | None:
     if event_id:
         ext_refs.append(
             ExternalReference(
-                source_name="V2 Secure",
+                source_name="v2secure",
                 external_id=event_id,
             )
         )

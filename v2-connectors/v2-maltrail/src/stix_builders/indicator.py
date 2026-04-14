@@ -8,20 +8,14 @@ from typing import Any
 
 from stix2 import Identity, Indicator, KillChainPhase
 
-from config import LABEL_SCORES, STIX_NAMESPACE
+from config import STIX_NAMESPACE
+from trail.label_map import IOCGroupInfo
 
 _AUTHOR = Identity(
-    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "V2 Secure")),
-    name="V2 Secure",
+    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "v2secure")),
+    name="v2secure",
     identity_class="organization",
 )
-
-_KILL_CHAIN_PHASES = [
-    KillChainPhase(
-        kill_chain_name="mitre-attack",
-        phase_name="command-and-control",
-    )
-]
 
 
 def get_author() -> Identity:
@@ -30,7 +24,7 @@ def get_author() -> Identity:
 
 def create_indicator(
     value: str,
-    label: str,
+    info: IOCGroupInfo,
     ioc_type: str,
     valid_days: int = 30,
     file_tag: str = "",
@@ -39,7 +33,7 @@ def create_indicator(
 
     Args:
         value: IOC value (IP address or domain name).
-        label: Trail category (malware, malicious, suspicious).
+        info: IOCGroupInfo with layer, group, score, kill_chain.
         ioc_type: 'ipv4' or 'domain'.
         valid_days: Indicator validity period in days.
         file_tag: Semantic tag from the source filename (e.g. 'emotet', 'bad_wpad').
@@ -50,8 +44,8 @@ def create_indicator(
         timespec="milliseconds"
     ).replace("+00:00", "Z")
 
-    # Deterministic ID based on IOC value + label
-    dedup_key = f"{ioc_type}:{value}:{label}"
+    # Deterministic ID based on IOC value + group
+    dedup_key = f"{ioc_type}:{value}:{info.group}"
     indicator_id = "indicator--" + str(uuid.uuid5(STIX_NAMESPACE, dedup_key))
 
     if ioc_type == "ipv4":
@@ -61,17 +55,25 @@ def create_indicator(
         pattern = f"[domain-name:value = '{value}']"
         main_observable_type = "Domain-Name"
 
-    score = LABEL_SCORES.get(label, 50)
+    # 4 labels: org, source, layer, group
+    labels = ["v2secure", "v2-ioc", info.layer, info.group]
 
-    labels = ["v2 secure", "maltrail", label]
+    # Per-group kill chain phase
+    kill_chain_phases = [
+        KillChainPhase(
+            kill_chain_name="mitre-attack",
+            phase_name=info.kill_chain,
+        )
+    ]
 
     if file_tag:
         description = (
-            f"Maltrail threat intelligence: {value} classified as {label} ({file_tag})."
+            f"Maltrail threat intelligence: {value} classified as "
+            f"{info.group} ({file_tag})."
         )
     else:
         description = (
-            f"Maltrail threat intelligence: {value} classified as {label}."
+            f"Maltrail threat intelligence: {value} classified as {info.group}."
         )
 
     kwargs: dict[str, Any] = {
@@ -88,9 +90,9 @@ def create_indicator(
         "confidence": 100,
         "revoked": False,
         "indicator_types": ["malicious-activity"],
-        "kill_chain_phases": _KILL_CHAIN_PHASES,
+        "kill_chain_phases": kill_chain_phases,
         "labels": labels,
-        "x_opencti_score": score,
+        "x_opencti_score": info.score,
         "x_opencti_detection": True,
         "x_opencti_main_observable_type": main_observable_type,
         "allow_custom": True,

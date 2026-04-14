@@ -12,15 +12,8 @@ from pycti import get_config_variable
 # Deterministic namespace for maltrail indicators
 STIX_NAMESPACE = uuid.UUID("c3d4e5f6-a7b8-9012-cdef-123456789abc")
 
-# Trail category labels (maps to maltrail/trails/static/ sub-directories)
-TRAIL_LABELS = ["malware", "malicious", "suspicious"]
-
-# Score mapping per label
-LABEL_SCORES = {
-    "malware": 90,
-    "malicious": 70,
-    "suspicious": 50,
-}
+# Trail folder names (sub-directories under the maltrail data dir)
+TRAIL_FOLDERS = ["malware", "malicious", "suspicious"]
 
 
 class ConnectorConfig:

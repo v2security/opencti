@@ -146,7 +146,7 @@ def _build_bundle(cve_data: dict, epss_data: dict | None) -> Bundle | None:
 
     # Tag vulnerability as having relationships if any software was linked
     if len(objects) > 2:
-        vuln = vuln.new_version(labels=list(vuln.get("labels", [])) + ["has-relationships"])
+        vuln = vuln.new_version(labels=list(vuln.get("labels", [])) + ["has-rel"])
         objects[1] = vuln
 
     return Bundle(objects=objects, allow_custom=True)
