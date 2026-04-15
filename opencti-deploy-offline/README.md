@@ -86,7 +86,7 @@ bash v2_unpack_opencti.sh
 ```
 
 Script copy files vào đúng path cuối cùng, **xóa folder tạm** sau khi xong.
-Còn lại sau unpack: `rpms/` + `runtime/` + `rabbitmq/` (cần cho setup).
+Còn lại sau unpack: `rpms/` + `runtime/` + `rabbitmq/` + `redis/` (cần cho setup).
 
 Kết quả sau khi chạy xong:
 
@@ -95,6 +95,8 @@ Kết quả sau khi chạy xong:
 | `minio/minio`, `minio/mc` | `/usr/local/bin/` |
 | `minio/v2_*.sh` | `/usr/local/bin/` |
 | `rabbitmq/v2_start/stop/uninstall_rabbitmq.sh` | `/usr/local/bin/` |
+| `redis/v2_setup_redis.sh` | `/usr/local/bin/` |
+| `redis/redis-service-override.conf` | Dùng bởi `v2_setup_redis.sh` |
 | `runtime/v2_uninstall_*.sh` | `/usr/local/bin/` |
 | `config/*` | `/etc/redis/`, `/etc/minio/`, `/etc/rabbitmq/`, `/etc/logrotate.d/` |
 | `systemd/*.service` | `/etc/systemd/system/` |
@@ -133,26 +135,35 @@ cd /opt/rabbitmq
 bash v2_setup_rabbitmq.sh
 ```
 
-### Bước 6: Start infrastructure
+### Bước 6: Setup Redis
+
+Setup kernel tuning (overcommit, THP), deploy config (tắt RDB persistence tránh BGSAVE crash Redis 6.2.x), systemd override, rồi enable + start Redis.
+
+```bash
+cd /opt/redis
+bash v2_setup_redis.sh
+```
+
+### Bước 7: Start infrastructure
 
 ```bash
 systemctl enable --now redis minio rabbitmq
 systemctl status redis minio rabbitmq
 ```
 
-### Bước 7: Setup OpenCTI Platform (Python venv)
+### Bước 8: Setup OpenCTI Platform (Python venv)
 
 ```bash
 v2_setup_opencti.sh
 ```
 
-### Bước 8: Setup OpenCTI Worker (Python venv)
+### Bước 9: Setup OpenCTI Worker (Python venv)
 
 ```bash
 v2_setup_opencti_worker.sh
 ```
 
-### Bước 9: Sửa credentials ⚠️
+### Bước 10: Sửa credentials ⚠️
 
 File `.env` là **config tập trung duy nhất** cho Platform, Worker và Tools.
 Start scripts tự đọc file này và map sang format riêng của từng component.
@@ -178,7 +189,7 @@ vi /etc/saids/opencti/.env
 | `TOOL_DATA_DIR` | Thư mục data cho tools | `/opt/tools/data` |
 | `VIRUSTOTAL_API_KEY` | VirusTotal API key | *(optional)* |
 
-### Bước 10: Start OpenCTI
+### Bước 11: Start OpenCTI
 
 ```bash
 # Platform
@@ -194,7 +205,7 @@ systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
 systemctl status opencti-worker@1 opencti-worker@2 opencti-worker@3
 ```
 
-### Bước 11: Kiểm tra
+### Bước 12: Kiểm tra
 
 ```bash
 curl -i http://localhost:8080/
@@ -289,6 +300,10 @@ opencti-deploy-offline/
 │   ├── v2_stop_rabbitmq.sh
 │   └── v2_uninstall_rabbitmq.sh
 │
+├── redis/
+│   ├── v2_setup_redis.sh              First-boot setup (kernel tune + deploy config)
+│   └── redis-service-override.conf    Systemd override (LimitNOFILE, OOM protect)
+│
 ├── config/                       Tất cả config files
 ├── systemd/                      4 service units
 │
@@ -345,6 +360,7 @@ Ports:
 
 | Vấn đề | Giải pháp |
 |--------|-----------|
+| Redis crash BGSAVE (signal 11) | RDB persistence đã được tắt (`save ""`) trong `redis.conf`. Nếu dùng config cũ, chạy lại `v2_setup_redis.sh` |
 | Platform SEGV (signal 11) | EQL patch đã tự động áp dụng. Kiểm tra `check_indicator.py` |
 | Không connect ES | Sửa `ELASTICSEARCH__URL` trong `/usr/local/bin/v2_start_opencti.sh` |
 | Worker không connect platform | Kiểm tra `OPENCTI_URL` + `OPENCTI_TOKEN` |
@@ -367,7 +383,9 @@ cd /tmp/rpms && bash v2_install_rpms.sh
 cd /tmp/runtime && bash v2_install_python.sh && bash v2_install_nodejs.sh
 v2_setup_minio.sh
 cd /tmp/rabbitmq && bash v2_setup_rabbitmq.sh
+cd /tmp/redis && bash v2_setup_redis.sh
 systemctl enable --now redis minio rabbitmq
+systemctl status redis minio rabbitmq
 v2_setup_opencti.sh
 v2_setup_opencti_worker.sh
 systemctl enable --now opencti-platform

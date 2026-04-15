@@ -174,41 +174,7 @@ fi
 systemctl daemon-reload
 
 #===============================================================================
-# 6. Enable + start
-#===============================================================================
-log_step "Enabling and starting Redis..."
-
-systemctl enable redis
-systemctl restart redis
-
-sleep 2
-if systemctl is-active redis &>/dev/null; then
-    log_info "Redis is running"
-else
-    log_error "Redis failed to start!"
-    systemctl status redis --no-pager -l 2>/dev/null | head -15
-    exit 1
-fi
-
-#===============================================================================
-# 7. Verify config loaded
-#===============================================================================
-log_step "Verifying config..."
-
-REDIS_PASS=$(grep -m1 "^requirepass" /etc/redis/redis.conf | awk '{print $2}')
-AUTH=""
-[[ -n "${REDIS_PASS}" ]] && AUTH="-a ${REDIS_PASS} --no-auth-warning"
-
-SAVE_CFG=$(redis-cli ${AUTH} CONFIG GET save 2>/dev/null | tail -1 | tr -d '\r')
-STOP_W=$(redis-cli ${AUTH} CONFIG GET stop-writes-on-bgsave-error 2>/dev/null | tail -1 | tr -d '\r')
-MAX_M=$(redis-cli ${AUTH} INFO memory 2>/dev/null | grep maxmemory_human | tr -d '\r' | cut -d: -f2)
-
-log_info "save = \"${SAVE_CFG}\" (empty = RDB disabled)"
-log_info "stop-writes-on-bgsave-error = ${STOP_W}"
-log_info "maxmemory = ${MAX_M}"
-
-#===============================================================================
-# 8. Marker
+# 6. Marker
 #===============================================================================
 touch "${MARKER_FILE}"
 chown redis:redis "${MARKER_FILE}" 2>/dev/null || true
@@ -224,3 +190,5 @@ echo "  Log:     /var/log/redis/redis.log"
 echo "  Kernel:  vm.overcommit_memory=1, THP=never"
 echo "  RDB:     DISABLED (save \"\")"
 echo ""
+log_info "Next steps:"
+log_info "  systemctl enable --now redis"

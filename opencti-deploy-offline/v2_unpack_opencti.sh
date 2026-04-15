@@ -79,6 +79,18 @@ log "  ✓ v2_*rabbitmq*.sh"
 log "  → Setup tay: cd $SCRIPT_DIR/rabbitmq && bash v2_setup_rabbitmq.sh"
 
 # ══════════════════════════════════════════════════════════════
+# 4b. Redis — setup script giữ tại chỗ, v2_setup_redis.sh → /usr/local/bin/
+# ══════════════════════════════════════════════════════════════
+log ""
+log "── Redis setup script → /usr/local/bin/"
+if [[ -f redis/v2_setup_redis.sh ]]; then
+    cp -f redis/v2_setup_redis.sh /usr/local/bin/v2_setup_redis.sh
+    chmod +x /usr/local/bin/v2_setup_redis.sh
+    log "  ✓ v2_setup_redis.sh"
+fi
+log "  → Setup tay: cd $SCRIPT_DIR/redis && bash v2_setup_redis.sh"
+
+# ══════════════════════════════════════════════════════════════
 # 5. Runtime uninstall scripts → /usr/local/bin/
 # ══════════════════════════════════════════════════════════════
 log ""

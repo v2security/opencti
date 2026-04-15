@@ -55,6 +55,11 @@ RPM_COUNT=$(ls rpms/*.rpm 2>/dev/null | wc -l)
 [[ "$RPM_COUNT" -lt 50 ]] && { warn "  ✗ Only $RPM_COUNT RPMs"; MISSING=$((MISSING+1)); } || log "  ✓ rpms/ ($RPM_COUNT RPMs)"
 
 log ""
+log "── Redis ──"
+check_file "redis/v2_setup_redis.sh"
+check_file "redis/redis-service-override.conf"
+
+log ""
 log "── Platform ──"
 check_file "opencti/build/back.js"
 check_file "opencti/package.json"
@@ -118,6 +123,7 @@ tar czf "$ARCHIVE_NAME" \
     runtime/v2_uninstall_nodejs.sh \
     minio/ \
     rabbitmq/ \
+    redis/ \
     config/ \
     systemd/ \
     opencti/ \
