@@ -1,14 +1,12 @@
 #!/bin/bash
 ###############################################################################
-# v2_uninstall_cti.sh — Gỡ bỏ hoàn toàn OpenCTI stack
+# v2_uninstall_opencti_infra.sh — Gỡ bỏ INFRA (Redis, MinIO, RabbitMQ, runtimes)
 #
-# CẢNH BÁO: Script này sẽ XÓA TẤT CẢ — data, config, services, runtimes
-# Khi chạy sẽ hỏi riêng:
-#   - Có xóa data MinIO không
-#   - Có xóa data RabbitMQ không
-#   - Có xóa data Redis không
+# CẢNH BÁO: Xóa infra services, config, runtimes.
+# Hỏi xác nhận riêng cho data mỗi service.
+# KHÔNG đụng OpenCTI Platform/Worker — dùng v2_uninstall_opencti_app.sh.
 #
-# Usage: bash v2_uninstall_cti.sh
+# Usage: v2_uninstall_opencti_infra.sh
 ###############################################################################
 set -euo pipefail
 
@@ -32,17 +30,18 @@ ask_yes_no() {
 
 echo ""
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║  CẢNH BÁO: Sẽ gỡ bỏ TOÀN BỘ OpenCTI stack!                 ║"
+echo "║  CẢNH BÁO: Sẽ gỡ bỏ INFRA!                                 ║"
 echo "║                                                            ║"
-echo "║  - OpenCTI Platform + Workers                              ║"
 echo "║  - MinIO, RabbitMQ, Redis                                  ║"
 echo "║  - Python 3.12, Node.js 22                                 ║"
-echo "║  - Logs, config, services sẽ bị xóa                        ║"
-echo "║  - Data sẽ hỏi xác nhận riêng cho từng dịch vụ            ║"
+echo "║  - Config, systemd units (infra)                           ║"
+echo "║  - Data sẽ hỏi xác nhận riêng cho từng dịch vụ             ║"
+echo "║                                                            ║"
+echo "║  KHÔNG đụng: OpenCTI Platform, Workers                     ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
 
-read -r -p "Xác nhận gỡ bỏ stack? (yes/no): " CONFIRM
+read -r -p "Xác nhận gỡ bỏ infra? (yes/no): " CONFIRM
 [[ "${CONFIRM,,}" == "yes" ]] || { echo "Hủy."; exit 0; }
 
 if ask_yes_no "Xóa data MinIO tại /var/lib/minio/data"; then
@@ -64,42 +63,19 @@ else
 fi
 
 log "══════════════════════════════════════════════════════════════"
-log "  Uninstalling OpenCTI Stack"
+log "  Uninstalling INFRA"
 log "══════════════════════════════════════════════════════════════"
-log "  DELETE_MINIO_DATA=${DELETE_MINIO_DATA}"
-log "  DELETE_RABBITMQ_DATA=${DELETE_RABBITMQ_DATA}"
-log "  DELETE_REDIS_DATA=${DELETE_REDIS_DATA}"
 
-# ── 1. Stop all ──────────────────────────────────────────────
+# ── 1. Stop infra services ───────────────────────────────────
 log ""
-log "── Stopping all services ──"
-systemctl stop opencti-worker@1 opencti-worker@2 opencti-worker@3 2>/dev/null || true
-systemctl stop opencti-platform 2>/dev/null || true
+log "── Stopping infra services ──"
 systemctl stop rabbitmq 2>/dev/null || true
 systemctl stop minio 2>/dev/null || true
 systemctl stop redis 2>/dev/null || true
+systemctl disable rabbitmq minio redis 2>/dev/null || true
+log "  ✓ Infra services stopped + disabled"
 
-systemctl disable opencti-worker@1 opencti-worker@2 opencti-worker@3 2>/dev/null || true
-systemctl disable opencti-platform rabbitmq minio redis 2>/dev/null || true
-log "  ✓ All services stopped + disabled"
-
-# ── 2. Remove OpenCTI Platform ───────────────────────────────
-log ""
-log "── Removing OpenCTI Platform ──"
-rm -rf /etc/saids/opencti
-rm -rf /var/log/opencti
-rm -f /var/lib/.v2_setup_opencti_done
-log "  ✓ /etc/saids/opencti removed"
-
-# ── 3. Remove OpenCTI Worker ─────────────────────────────────
-log ""
-log "── Removing OpenCTI Worker ──"
-rm -rf /etc/saids/opencti-worker
-rm -rf /var/log/opencti-worker
-rm -f /var/lib/.v2_setup_opencti_worker_done
-log "  ✓ /etc/saids/opencti-worker removed"
-
-# ── 4. Remove RabbitMQ ───────────────────────────────────────
+# ── 2. Remove RabbitMQ ───────────────────────────────────────
 log ""
 log "── Removing RabbitMQ ──"
 rm -rf /opt/rabbitmq
@@ -114,7 +90,7 @@ rm -rf /etc/rabbitmq
 rm -f /var/lib/.v2_rabbitmq_setup_done
 log "  ✓ RabbitMQ removed"
 
-# ── 5. Remove MinIO ──────────────────────────────────────────
+# ── 3. Remove MinIO ──────────────────────────────────────────
 log ""
 log "── Removing MinIO ──"
 if [[ "${DELETE_MINIO_DATA}" == "true" ]]; then
@@ -126,37 +102,45 @@ fi
 rm -rf /var/log/minio
 rm -rf /etc/minio
 rm -f /var/lib/minio/.setup_done
+rm -f /usr/local/bin/minio /usr/local/bin/mc
 log "  ✓ MinIO removed"
 
-# ── 6. Remove Redis ──────────────────────────────────────────
+# ── 4. Remove Redis ──────────────────────────────────────────
 log ""
-log "── Removing Redis data/config ──"
+log "── Removing Redis ──"
 if [[ "${DELETE_REDIS_DATA}" == "true" ]]; then
     rm -rf /var/lib/redis
     log "  ✓ Redis data removed"
 else
     log "  • Redis data kept: /var/lib/redis"
 fi
+rm -f /etc/redis/redis.conf
+rmdir /etc/redis 2>/dev/null || true
+rm -rf /etc/systemd/system/redis.service.d
+log "  ✓ Redis removed"
 
-# ── 7. Remove systemd units ──────────────────────────────────
+# ── 5. Remove infra systemd units ────────────────────────────
 log ""
-log "── Removing systemd units ──"
-rm -f /etc/systemd/system/opencti-platform.service
-rm -f /etc/systemd/system/opencti-worker@.service
+log "── Removing infra systemd units ──"
 rm -f /etc/systemd/system/rabbitmq.service
 rm -f /etc/systemd/system/minio.service
+rm -f /etc/systemd/system/disable-thp.service
 systemctl daemon-reload
-log "  ✓ Service units removed"
+log "  ✓ Infra service units removed"
 
-# ── 8. Remove scripts from /usr/local/bin/ ───────────────────
+# ── 6. Remove infra scripts from /usr/local/bin/ ─────────────
 log ""
-log "── Removing scripts from /usr/local/bin/ ──"
-rm -f /usr/local/bin/v2_*.sh
-rm -f /usr/local/bin/minio
-rm -f /usr/local/bin/mc
-log "  ✓ /usr/local/bin/ cleaned"
+log "── Removing infra scripts from /usr/local/bin/ ──"
+rm -f /usr/local/bin/v2_setup_minio.sh /usr/local/bin/v2_start_minio.sh
+rm -f /usr/local/bin/v2_stop_minio.sh /usr/local/bin/v2_uninstall_minio.sh
+rm -f /usr/local/bin/v2_start_rabbitmq.sh /usr/local/bin/v2_stop_rabbitmq.sh
+rm -f /usr/local/bin/v2_uninstall_rabbitmq.sh
+rm -f /usr/local/bin/v2_setup_redis.sh
+rm -f /usr/local/bin/v2_uninstall_python.sh /usr/local/bin/v2_uninstall_nodejs.sh
+rm -f /usr/local/bin/v2_uninstall_opencti_infra.sh
+log "  ✓ Infra scripts cleaned"
 
-# ── 9. Remove runtimes ───────────────────────────────────────
+# ── 7. Remove runtimes ───────────────────────────────────────
 log ""
 log "── Removing Python 3.12 + Node.js 22 ──"
 rm -rf /opt/python312
@@ -169,23 +153,22 @@ rm -f /usr/bin/node /usr/bin/npm /usr/bin/npx
 rm -f /var/lib/.v2_python_installed /var/lib/.v2_nodejs_installed
 log "  ✓ Runtimes removed"
 
-# ── 10. Remove configs ───────────────────────────────────────
+# ── 8. Remove configs ────────────────────────────────────────
 log ""
-log "── Removing config files ──"
+log "── Removing infra config files ──"
 rm -f /etc/logrotate.d/opencti
-rm -f /etc/redis/redis.conf
-rmdir /etc/redis 2>/dev/null || true
+rm -f /etc/sysctl.d/99-redis.conf
 log "  ✓ Configs removed"
 
 # ── Done ─────────────────────────────────────────────────────
 log ""
 log "══════════════════════════════════════════════════════════════"
-log "  ✓ UNINSTALL COMPLETE"
+log "  ✓ INFRA UNINSTALL COMPLETE"
 log "══════════════════════════════════════════════════════════════"
 log ""
 log "  Còn lại (không xóa):"
 log "    - RPM packages (system deps) — dnf remove nếu cần"
-log "    - /etc/saids/ (thư mục rỗng)"
+log "    - OpenCTI Platform + Workers (dùng v2_uninstall_opencti_app.sh)"
 log ""
 if [[ "${DELETE_RABBITMQ_DATA}" != "true" ]]; then
     log "  Data RabbitMQ được giữ lại: /var/lib/rabbitmq/"

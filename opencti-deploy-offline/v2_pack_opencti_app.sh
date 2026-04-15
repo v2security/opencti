@@ -1,6 +1,6 @@
 #!/bin/bash
 ###############################################################################
-# v2_pack_cti.sh — Đóng gói toàn bộ OpenCTI offline deployment thành 1 archive
+# v2_pack_opencti_app.sh — Đóng gói APP (Platform + Worker) cho OpenCTI
 #
 # Chạy TRÊN MÁY BUILD sau khi đã:
 #   1. cd opencti && ./v2_build_backend.sh
@@ -10,25 +10,26 @@
 #
 # Script chỉ KIỂM TRA + ĐÓNG GÓI — không build gì cả.
 #
-# Output: opencti-offline-deploy.tar.gz
+# Output: opencti-app.tar.gz
+#   Gồm: Platform + Worker (deploy lại mà không đụng infra)
 #
 # Usage:
 #   cd opencti-deploy-offline
-#   ./v2_pack_cti.sh
+#   ./v2_pack_opencti_app.sh
 ###############################################################################
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-ARCHIVE_NAME="opencti-offline-deploy.tar.gz"
+ARCHIVE_NAME="opencti-app.tar.gz"
 
 log()   { echo -e "\e[32m[PACK]\e[0m $1"; }
 warn()  { echo -e "\e[33m[PACK]\e[0m $1"; }
 error() { echo -e "\e[31m[PACK]\e[0m $1" >&2; exit 1; }
 
 log "══════════════════════════════════════════════════════════════"
-log "  OpenCTI Offline Deploy — PACK"
+log "  OpenCTI Offline Deploy — PACK APP"
 log "══════════════════════════════════════════════════════════════"
 
 MISSING=0
@@ -40,24 +41,6 @@ check_dir() {
     if [[ ! -d "$1" ]]; then warn "  ✗ MISSING: $1/"; MISSING=$((MISSING + 1))
     else log "  ✓ $1/"; fi
 }
-
-log ""
-log "── Binaries ──"
-check_file "runtime/python312.tar.gz"
-check_file "runtime/nodejs22.tar.gz"
-check_file "minio/minio"
-check_file "minio/mc"
-
-RABBITMQ_TAR=$(ls rabbitmq/rabbitmq-server-generic-unix-*.tar.xz 2>/dev/null | head -1)
-[[ -z "$RABBITMQ_TAR" ]] && { warn "  ✗ MISSING: rabbitmq tarball"; MISSING=$((MISSING+1)); } || log "  ✓ $RABBITMQ_TAR"
-
-RPM_COUNT=$(ls rpms/*.rpm 2>/dev/null | wc -l)
-[[ "$RPM_COUNT" -lt 50 ]] && { warn "  ✗ Only $RPM_COUNT RPMs"; MISSING=$((MISSING+1)); } || log "  ✓ rpms/ ($RPM_COUNT RPMs)"
-
-log ""
-log "── Redis ──"
-check_file "redis/v2_setup_redis.sh"
-check_file "redis/redis-service-override.conf"
 
 log ""
 log "── Platform ──"
@@ -82,25 +65,15 @@ check_file "opencti-worker/v2_stop_opencti_worker.sh"
 check_file "opencti-worker/v2_uninstall_opencti_worker.sh"
 
 log ""
-log "── Config + Systemd ──"
-check_file "config/.env"
-for f in config/.env.sample \
-         config/redis.conf config/minio.conf config/rabbitmq.conf config/rabbitmq-env.conf \
-         config/enabled_plugins config/elasticsearch.yml config/logrotate.conf config/check_indicator.py \
-         systemd/minio.service systemd/rabbitmq.service systemd/opencti-platform.service systemd/opencti-worker@.service; do
-    check_file "$f"
-done
-
-log ""
 log "── Deploy scripts ──"
-check_file "v2_unpack_opencti.sh"
-check_file "v2_ti_uninstall_all.sh"
+check_file "v2_unpack_opencti_app.sh"
+check_file "v2_uninstall_opencti_app.sh"
 
 [[ "$MISSING" -gt 0 ]] && error "$MISSING files missing — cannot pack!"
 
 # ══════════════════════════════════════════════════════════════
 log ""
-log "── Creating archive ──"
+log "── Creating $ARCHIVE_NAME ──"
 
 tar czf "$ARCHIVE_NAME" \
     --exclude='.python-venv' \
@@ -114,29 +87,17 @@ tar czf "$ARCHIVE_NAME" \
     --exclude='v2_prepare_opencti.sh' \
     --exclude='v2_prepare_opencti_worker.sh' \
     -C "$SCRIPT_DIR" \
-    rpms/ \
-    runtime/python312.tar.gz \
-    runtime/nodejs22.tar.gz \
-    runtime/v2_install_python.sh \
-    runtime/v2_install_nodejs.sh \
-    runtime/v2_uninstall_python.sh \
-    runtime/v2_uninstall_nodejs.sh \
-    minio/ \
-    rabbitmq/ \
-    redis/ \
-    config/ \
-    systemd/ \
     opencti/ \
     opencti-worker/ \
-    v2_unpack_opencti.sh \
-    v2_ti_uninstall_all.sh
+    v2_unpack_opencti_app.sh \
+    v2_uninstall_opencti_app.sh
 
 ARCHIVE_SIZE=$(du -sh "$ARCHIVE_NAME" | cut -f1)
 
 log ""
 log "══════════════════════════════════════════════════════════════"
-log "  ✓ PACK COMPLETE: $ARCHIVE_NAME ($ARCHIVE_SIZE)"
+log "  ✓ PACK APP COMPLETE: $ARCHIVE_NAME ($ARCHIVE_SIZE)"
 log "══════════════════════════════════════════════════════════════"
 log ""
 log "  scp $ARCHIVE_NAME root@<target>:/opt/"
-log "  # Trên target: cd /opt && tar xzf $ARCHIVE_NAME && bash v2_unpack_opencti.sh"
+log "  # Trên target: cd /opt && tar xzf $ARCHIVE_NAME && bash v2_unpack_opencti_app.sh"

@@ -53,17 +53,25 @@ cd opencti-deploy-offline
 
 ### Bước 4: Pack
 
+Script tạo 2 archive riêng:
+- `opencti-infra.tar.gz` — RPMs, runtime, minio, rabbitmq, redis, config, systemd
+- `opencti-app.tar.gz` — Platform + Worker (deploy lại mà không đụng infra)
+
 ```bash
 cd opencti-deploy-offline
 
-# → opencti-offline-deploy.tar.gz (~800MB-1.2GB)
-./v2_pack_opencti.sh
+./v2_pack_opencti_infra.sh      # Pack infra
+./v2_pack_opencti_app.sh        # Pack app
 ```
 
 ### Bước 5: Copy sang máy target
 
 ```bash
-scp opencti-offline-deploy.tar.gz root@163.223.58.17:/opt/
+# Lần đầu: cần cả 2
+scp opencti-infra.tar.gz opencti-app.tar.gz root@163.223.58.17:/opt/
+
+# Deploy lại app: chỉ cần file này
+scp opencti-app.tar.gz root@163.223.58.17:/opt/
 ```
 
 ---
@@ -81,12 +89,15 @@ scp opencti-offline-deploy.tar.gz root@163.223.58.17:/opt/
 
 ```bash
 cd /opt
-tar xzf opencti-offline-deploy.tar.gz
-bash v2_unpack_opencti.sh
+tar xzf opencti-infra.tar.gz
+bash v2_unpack_opencti_infra.sh
+
+tar xzf opencti-app.tar.gz
+bash v2_unpack_opencti_app.sh
 ```
 
 Script copy files vào đúng path cuối cùng, **xóa folder tạm** sau khi xong.
-Còn lại sau unpack: `rpms/` + `runtime/` + `rabbitmq/` + `redis/` (cần cho setup).
+Sau unpack infra còn lại: `rpms/` + `runtime/` + `rabbitmq/` (cần cho setup).
 
 Kết quả sau khi chạy xong:
 
@@ -95,8 +106,7 @@ Kết quả sau khi chạy xong:
 | `minio/minio`, `minio/mc` | `/usr/local/bin/` |
 | `minio/v2_*.sh` | `/usr/local/bin/` |
 | `rabbitmq/v2_start/stop/uninstall_rabbitmq.sh` | `/usr/local/bin/` |
-| `redis/v2_setup_redis.sh` | `/usr/local/bin/` |
-| `redis/redis-service-override.conf` | Dùng bởi `v2_setup_redis.sh` |
+| `redis/v2_setup_redis.sh` | `/usr/local/bin/` (self-contained, override inline) |
 | `runtime/v2_uninstall_*.sh` | `/usr/local/bin/` |
 | `config/*` | `/etc/redis/`, `/etc/minio/`, `/etc/rabbitmq/`, `/etc/logrotate.d/` |
 | `systemd/*.service` | `/etc/systemd/system/` |
@@ -105,7 +115,8 @@ Kết quả sau khi chạy xong:
 | `opencti/v2_*.sh` | `/usr/local/bin/` |
 | `opencti-worker/*` | `/etc/saids/opencti-worker/` |
 | `opencti-worker/v2_*.sh` | `/usr/local/bin/` |
-| `v2_ti_uninstall.sh` | `/usr/local/bin/` |
+| `v2_uninstall_opencti_infra.sh` | `/usr/local/bin/` |
+| `v2_uninstall_opencti_app.sh` | `/usr/local/bin/` |
 
 ### Bước 2: Cài RPMs
 
@@ -137,11 +148,10 @@ bash v2_setup_rabbitmq.sh
 
 ### Bước 6: Setup Redis
 
-Setup kernel tuning (overcommit, THP), deploy config (tắt RDB persistence tránh BGSAVE crash Redis 6.2.x), systemd override, rồi enable + start Redis.
+Setup kernel tuning (overcommit, THP), verify config (tắt RDB persistence tránh BGSAVE crash Redis 6.2.x), deploy systemd override, rồi enable + start Redis.
 
 ```bash
-cd /opt/redis
-bash v2_setup_redis.sh
+v2_setup_redis.sh
 ```
 
 ### Bước 7: Start infrastructure
@@ -214,6 +224,52 @@ curl -i http://localhost:8080/
 
 ---
 
+## PHẦN 3: DEPLOY LẠI APP (giữ nguyên infra)
+
+Khi sửa platform/worker, chỉ cần pack lại app và deploy lại — **không cần cài lại Redis, MinIO, RabbitMQ**, không mất dữ liệu.
+
+### Trên máy build
+
+```bash
+cd opencti-deploy-offline
+
+# Build lại nếu cần
+./opencti/v2_build_backend.sh
+./opencti/v2_build_frontend.sh
+./opencti/v2_prepare_opencti.sh
+./opencti-worker/v2_prepare_opencti_worker.sh
+
+# Chỉ pack app
+./v2_pack_opencti_app.sh
+
+scp opencti-app.tar.gz root@163.223.58.17:/opt/
+```
+
+### Trên máy target
+
+```bash
+# Stop app (giữ infra chạy)
+systemctl stop opencti-worker@1 opencti-worker@2 opencti-worker@3
+systemctl stop opencti-platform
+
+# Unpack app mới
+cd /opt
+tar xzf opencti-app.tar.gz
+bash v2_unpack_opencti_app.sh
+
+# Setup lại venv (nếu cần)
+rm -f /var/lib/.v2_setup_opencti_done /var/lib/.v2_setup_opencti_worker_done
+v2_setup_opencti.sh
+v2_setup_opencti_worker.sh
+
+# Start lại
+systemctl start opencti-platform
+# Đợi ~60s...
+systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
+```
+
+---
+
 ## Quản lý services
 
 ### Stop
@@ -237,13 +293,14 @@ systemctl start opencti-platform
 systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
 ```
 
-### Gỡ bỏ toàn bộ
+### Gỡ bỏ
 
 ```bash
-v2_ti_uninstall.sh
+# Gỡ app (Platform + Worker) — giữ nguyên infra
+v2_uninstall_opencti_app.sh
 
-# Hoặc giữ data
-KEEP_DATA=true v2_ti_uninstall.sh
+# Gỡ infra (Redis, MinIO, RabbitMQ, runtimes) — hỏi xác nhận data
+v2_uninstall_opencti_infra.sh
 ```
 
 ### Xem logs
@@ -270,9 +327,12 @@ rm /var/lib/.v2_setup_opencti_worker_done  # Worker
 ```
 opencti-deploy-offline/
 ├── v2_clean_build.sh             ★ Xóa artifacts để build lại (máy build)
-├── v2_pack_opencti.sh            ★ Đóng gói → archive
-├── v2_unpack_opencti.sh          ★ Đặt files vào đúng chỗ (máy target)
-├── v2_ti_uninstall.sh            ★ Gỡ bỏ toàn bộ → /usr/local/bin/
+├── v2_pack_opencti_infra.sh      ★ Đóng gói infra → opencti-infra.tar.gz
+├── v2_pack_opencti_app.sh        ★ Đóng gói app → opencti-app.tar.gz
+├── v2_unpack_opencti_infra.sh    ★ Deploy infra lên target
+├── v2_unpack_opencti_app.sh      ★ Deploy app lên target (chạy lại được)
+├── v2_uninstall_opencti_infra.sh  ★ Gỡ infra → /usr/local/bin/
+├── v2_uninstall_opencti_app.sh    ★ Gỡ app → /usr/local/bin/
 │
 ├── rpms/
 │   ├── v2_install_rpms.sh
@@ -301,8 +361,8 @@ opencti-deploy-offline/
 │   └── v2_uninstall_rabbitmq.sh
 │
 ├── redis/
-│   ├── v2_setup_redis.sh              First-boot setup (kernel tune + deploy config)
-│   └── redis-service-override.conf    Systemd override (LimitNOFILE, OOM protect)
+│   ├── v2_setup_redis.sh              First-boot setup (self-contained, kernel tune + systemd override inline)
+│   └── redis-service-override.conf    Reference only (content embedded in setup script)
 │
 ├── config/                       Tất cả config files
 ├── systemd/                      4 service units
@@ -332,7 +392,8 @@ opencti-deploy-offline/
 /opt/rabbitmq/                 → RabbitMQ server
 /usr/local/bin/minio           → MinIO binary
 /usr/local/bin/v2_*.sh         → Tất cả scripts (setup/start/stop/uninstall)
-/usr/local/bin/v2_ti_uninstall.sh → Gỡ toàn bộ stack
+/usr/local/bin/v2_uninstall_opencti_infra.sh → Gỡ infra
+/usr/local/bin/v2_uninstall_opencti_app.sh   → Gỡ app
 /usr/bin/redis-server          → Redis (RPM)
 
 /etc/saids/opencti/            ★ Platform
@@ -383,7 +444,7 @@ cd /tmp/rpms && bash v2_install_rpms.sh
 cd /tmp/runtime && bash v2_install_python.sh && bash v2_install_nodejs.sh
 v2_setup_minio.sh
 cd /tmp/rabbitmq && bash v2_setup_rabbitmq.sh
-cd /tmp/redis && bash v2_setup_redis.sh
+v2_setup_redis.sh
 systemctl enable --now redis minio rabbitmq
 systemctl status redis minio rabbitmq
 v2_setup_opencti.sh

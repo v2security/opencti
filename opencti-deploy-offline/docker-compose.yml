@@ -35,10 +35,10 @@
 #   # 3. Setup infra
 #   v2_setup_minio.sh
 #   cd /tmp/rabbitmq && ./v2_setup_rabbitmq.sh
+#   v2_setup_redis.sh
 #
 #   # 4. Start infra
-#   systemctl enable redis minio rabbitmq
-#   systemctl start redis minio rabbitmq
+#   systemctl enable --now redis minio rabbitmq
 #   systemctl status redis minio rabbitmq
 #
 #   # 5. Setup OpenCTI Platform (create Python venv)
@@ -133,6 +133,12 @@ services:
       - ./rabbitmq/v2_uninstall_rabbitmq.sh:/usr/local/bin/v2_uninstall_rabbitmq.sh:ro
 
       # ══════════════════════════════════════════════════════════
+      # Redis — setup script → /usr/local/bin/ (self-contained)
+      # Config redis.conf already mounted above via config/
+      # ══════════════════════════════════════════════════════════
+      - ./redis/v2_setup_redis.sh:/usr/local/bin/v2_setup_redis.sh:ro
+
+      # ══════════════════════════════════════════════════════════
       # Systemd service units
       # ══════════════════════════════════════════════════════════
       - ./systemd/minio.service:/etc/systemd/system/minio.service:ro
@@ -163,14 +169,15 @@ services:
       - ./opencti-worker/v2_start_opencti_worker.sh:/usr/local/bin/v2_start_opencti_worker.sh:ro
       - ./opencti-worker/v2_stop_opencti_worker.sh:/usr/local/bin/v2_stop_opencti_worker.sh:ro
       - ./opencti-worker/v2_uninstall_opencti_worker.sh:/usr/local/bin/v2_uninstall_opencti_worker.sh:ro
-      - ./v2_ti_uninstall_all.sh:/usr/local/bin/v2_ti_uninstall_all.sh:ro
+      - ./v2_uninstall_opencti_infra.sh:/usr/local/bin/v2_uninstall_opencti_infra.sh:ro
+      - ./v2_uninstall_opencti_app.sh:/usr/local/bin/v2_uninstall_opencti_app.sh:ro
 
     ports:
       - "16379:6379"      # Redis
       - "19000:9000"      # MinIO API
       - "19001:9001"      # MinIO Console
-      - "15672:5672"      # RabbitMQ AMQP
-      - "25672:15672"     # RabbitMQ Management
+      - "25672:5672"      # RabbitMQ AMQP
+      - "35672:15672"     # RabbitMQ Management
       - "18080:8080"      # OpenCTI Platform
     environment:
       - container=docker

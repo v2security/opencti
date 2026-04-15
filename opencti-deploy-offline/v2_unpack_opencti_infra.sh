@@ -1,16 +1,16 @@
 #!/bin/bash
 ###############################################################################
-# v2_unpack_opencti.sh — Giải nén + đặt files vào đúng chỗ trên Rocky Linux 9
+# v2_unpack_opencti_infra.sh — Deploy INFRA lên máy target (Rocky Linux 9)
 #
-# Script COPY FILES vào đúng path cuối cùng, xóa folder tạm sau khi xong.
-# Sau khi chạy xong, bạn tự chạy setup + start theo hướng dẫn.
+# Đặt files infra vào đúng chỗ: RPMs, runtime, minio, rabbitmq, redis,
+# config, systemd. Sau đó chạy setup + enable bằng tay.
 #
 # Chạy TRÊN MÁY TARGET (offline) với quyền root.
 #
 # Usage:
 #   cd /opt
-#   tar xzf opencti-offline-deploy.tar.gz
-#   bash v2_unpack_opencti.sh
+#   tar xzf opencti-infra.tar.gz
+#   bash v2_unpack_opencti_infra.sh
 ###############################################################################
 set -euo pipefail
 
@@ -31,7 +31,7 @@ else
 fi
 
 log "══════════════════════════════════════════════════════════════"
-log "  OpenCTI Offline Deploy — UNPACK + PLACE FILES"
+log "  OpenCTI Offline Deploy — UNPACK INFRA"
 log "══════════════════════════════════════════════════════════════"
 
 # ══════════════════════════════════════════════════════════════
@@ -79,19 +79,20 @@ log "  ✓ v2_*rabbitmq*.sh"
 log "  → Setup tay: cd $SCRIPT_DIR/rabbitmq && bash v2_setup_rabbitmq.sh"
 
 # ══════════════════════════════════════════════════════════════
-# 4b. Redis — setup script giữ tại chỗ, v2_setup_redis.sh → /usr/local/bin/
+# 5. Redis — v2_setup_redis.sh → /usr/local/bin/ (self-contained)
 # ══════════════════════════════════════════════════════════════
 log ""
 log "── Redis setup script → /usr/local/bin/"
 if [[ -f redis/v2_setup_redis.sh ]]; then
     cp -f redis/v2_setup_redis.sh /usr/local/bin/v2_setup_redis.sh
     chmod +x /usr/local/bin/v2_setup_redis.sh
-    log "  ✓ v2_setup_redis.sh"
+    log "  ✓ v2_setup_redis.sh → /usr/local/bin/"
 fi
-log "  → Setup tay: cd $SCRIPT_DIR/redis && bash v2_setup_redis.sh"
+rm -rf redis/
+log "  ✓ redis/ cleaned up"
 
 # ══════════════════════════════════════════════════════════════
-# 5. Runtime uninstall scripts → /usr/local/bin/
+# 6. Runtime uninstall scripts → /usr/local/bin/
 # ══════════════════════════════════════════════════════════════
 log ""
 log "── Runtime uninstall scripts → /usr/local/bin/"
@@ -101,7 +102,7 @@ chmod +x /usr/local/bin/v2_uninstall_*.sh
 log "  ✓ v2_uninstall_python.sh, v2_uninstall_nodejs.sh"
 
 # ══════════════════════════════════════════════════════════════
-# 6. Config files → /etc/<service>/
+# 7. Config files → /etc/<service>/
 # ══════════════════════════════════════════════════════════════
 log ""
 log "── Config files"
@@ -143,7 +144,7 @@ rm -rf config/
 log "  ✓ config/ cleaned up"
 
 # ══════════════════════════════════════════════════════════════
-# 7. Systemd service units → /etc/systemd/system/
+# 8. Systemd service units → /etc/systemd/system/
 # ══════════════════════════════════════════════════════════════
 log ""
 log "── Systemd services"
@@ -157,76 +158,28 @@ rm -rf systemd/
 log "  ✓ systemd/ cleaned up"
 
 # ══════════════════════════════════════════════════════════════
-# 8. OpenCTI Platform → /etc/saids/opencti/
+# 9. Infra uninstall script → /usr/local/bin/
 # ══════════════════════════════════════════════════════════════
-log ""
-log "── OpenCTI Platform → /etc/saids/opencti/"
-rsync -a \
-    --exclude='.python-venv' \
-    --exclude='logs' \
-    --exclude='.support' \
-    --exclude='telemetry' \
-    --exclude='__pycache__' \
-    --exclude='v2_*.sh' \
-    --exclude='.env' \
-    --exclude='.env.sample' \
-    opencti/ /etc/saids/opencti/
-log "  ✓ Platform files → /etc/saids/opencti/ (không có v2_*.sh, .env)"
-
-# Platform scripts → /usr/local/bin/
-cp -f opencti/v2_start_opencti.sh     /usr/local/bin/v2_start_opencti.sh
-cp -f opencti/v2_stop_opencti.sh      /usr/local/bin/v2_stop_opencti.sh
-cp -f opencti/v2_uninstall_opencti.sh /usr/local/bin/v2_uninstall_opencti.sh
-cp -f opencti/v2_setup_opencti.sh     /usr/local/bin/v2_setup_opencti.sh
-chmod +x /usr/local/bin/v2_*opencti*.sh
-log "  ✓ v2_start/stop/setup/uninstall_opencti.sh → /usr/local/bin/"
-rm -rf opencti/
-log "  ✓ opencti/ cleaned up"
+if [[ -f v2_uninstall_opencti_infra.sh ]]; then
+    log ""
+    log "── v2_uninstall_opencti_infra.sh → /usr/local/bin/"
+    cp -f v2_uninstall_opencti_infra.sh /usr/local/bin/v2_uninstall_opencti_infra.sh
+    chmod +x /usr/local/bin/v2_uninstall_opencti_infra.sh
+    rm -f v2_uninstall_opencti_infra.sh
+    log "  ✓ v2_uninstall_opencti_infra.sh → /usr/local/bin/"
+fi
 
 # ══════════════════════════════════════════════════════════════
-# 9. OpenCTI Worker → /etc/saids/opencti-worker/
+# Cleanup
 # ══════════════════════════════════════════════════════════════
-log ""
-log "── OpenCTI Worker → /etc/saids/opencti-worker/"
-mkdir -p /etc/saids/opencti-worker
-rsync -a \
-    --exclude='.python-venv' \
-    --exclude='__pycache__' \
-    --exclude='v2_*.sh' \
-    opencti-worker/ /etc/saids/opencti-worker/
-log "  ✓ Worker files → /etc/saids/opencti-worker/ (không có v2_*.sh)"
-
-# Worker scripts → /usr/local/bin/
-cp -f opencti-worker/v2_start_opencti_worker.sh     /usr/local/bin/v2_start_opencti_worker.sh
-cp -f opencti-worker/v2_stop_opencti_worker.sh      /usr/local/bin/v2_stop_opencti_worker.sh
-cp -f opencti-worker/v2_uninstall_opencti_worker.sh /usr/local/bin/v2_uninstall_opencti_worker.sh
-cp -f opencti-worker/v2_setup_opencti_worker.sh     /usr/local/bin/v2_setup_opencti_worker.sh
-chmod +x /usr/local/bin/v2_*worker*.sh
-log "  ✓ v2_start/stop/setup/uninstall_opencti_worker.sh → /usr/local/bin/"
-rm -rf opencti-worker/
-log "  ✓ opencti-worker/ cleaned up"
-
-# ══════════════════════════════════════════════════════════════
-# 10. Global uninstall script → /usr/local/bin/
-# ══════════════════════════════════════════════════════════════
-log ""
-log "── v2_ti_uninstall_all.sh → /usr/local/bin/"
-cp -f v2_ti_uninstall_all.sh /usr/local/bin/v2_ti_uninstall_all.sh
-chmod +x /usr/local/bin/v2_ti_uninstall_all.sh
-rm -f v2_ti_uninstall_all.sh
-log "  ✓ v2_ti_uninstall_all.sh → /usr/local/bin/"
-
-# ══════════════════════════════════════════════════════════════
-# Cleanup — xóa unpack script (đã chạy xong)
-# ══════════════════════════════════════════════════════════════
-rm -f v2_unpack_opencti.sh
+rm -f v2_unpack_opencti_infra.sh
 
 # ══════════════════════════════════════════════════════════════
 # DONE
 # ══════════════════════════════════════════════════════════════
 echo ""
 log "══════════════════════════════════════════════════════════════"
-log "  ✓ FILES PLACED — giờ chạy setup bằng tay"
+log "  ✓ INFRA FILES PLACED"
 log "══════════════════════════════════════════════════════════════"
 log ""
 log "  Còn lại: rpms/ + runtime/ + rabbitmq/ (cần cho setup)"
@@ -237,24 +190,11 @@ log ""
 log "  # 2. Python + Node.js"
 log "  cd $SCRIPT_DIR/runtime && bash v2_install_python.sh && bash v2_install_nodejs.sh"
 log ""
-log "  # 3. MinIO + RabbitMQ setup"
+log "  # 3. MinIO + RabbitMQ + Redis setup"
 log "  v2_setup_minio.sh"
 log "  cd $SCRIPT_DIR/rabbitmq && bash v2_setup_rabbitmq.sh"
+log "  v2_setup_redis.sh"
 log ""
 log "  # 4. Start infra"
 log "  systemctl enable --now redis minio rabbitmq"
-log ""
-log "  # 5. Setup OpenCTI venv"
-log "  v2_setup_opencti.sh"
-log "  v2_setup_opencti_worker.sh"
-log ""
-log "  # 6. Sửa credentials (QUAN TRỌNG! — 1 file duy nhất)"
-log "  vi /etc/saids/opencti/.env"
-log ""
-log "  # 7. Start OpenCTI"
-log "  systemctl enable opencti-platform"
-log "  systemctl start opencti-platform"
-log "  # Đợi ~60s..."
-log "  systemctl enable opencti-worker@{1..3}"
-log "  systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3"
 log ""

@@ -5,24 +5,18 @@
 #
 # MÔ TẢ:
 #   Setup Redis cho OpenCTI offline deployment:
-#   1. Tạo thư mục + permissions
-#   2. Deploy redis.conf (tắt RDB persistence, tránh BGSAVE crash)
+#   1. Verify redis-server + redis.conf
+#   2. Tạo thư mục + permissions
 #   3. Deploy systemd override (auto-restart, OOM protect)
 #   4. Tune kernel: vm.overcommit_memory=1, disable THP
-#   5. Enable + start redis service
 #
 # YÊU CẦU:
 #   - Redis RPM đã cài (từ v2_install_rpms.sh)
+#   - /etc/redis/redis.conf đã deploy (từ v2_unpack_opencti_infra.sh)
 #   - Quyền root
 #
-# INPUT:
-#   Files (cùng thư mục):
-#     - redis-service-override.conf : Systemd override
-#   Files (config/):
-#     - redis.conf                  : Redis config template
-#
 # USAGE:
-#   sudo bash v2_setup_redis.sh
+#   v2_setup_redis.sh        # chạy từ /usr/local/bin/
 #
 #===============================================================================
 
@@ -39,8 +33,6 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step()  { echo -e "${BLUE}[STEP]${NC} $1"; }
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_DIR="$(cd "${SCRIPT_DIR}/../config" && pwd)"
 MARKER_FILE="/var/lib/redis/.setup_done"
 
 #-------------------------------------------------------------------------------
@@ -86,6 +78,7 @@ fi
 
 # Persist across reboot
 if ! grep -q "^vm.overcommit_memory" /etc/sysctl.d/99-redis.conf 2>/dev/null; then
+    mkdir -p /etc/sysctl.d
     cat > /etc/sysctl.d/99-redis.conf << 'EOF'
 # Redis: allow overcommit for fork (BGSAVE/BGREWRITEAOF)
 vm.overcommit_memory = 1
@@ -138,38 +131,38 @@ else
 fi
 
 #===============================================================================
-# 4. Deploy redis.conf
+# 4. Verify redis.conf (deployed by v2_unpack_opencti_infra.sh)
 #===============================================================================
-log_step "Deploying redis.conf..."
+log_step "Checking redis.conf..."
 
-if [[ -f "${CONFIG_DIR}/redis.conf" ]]; then
-    # Backup nếu đã có
-    [[ -f /etc/redis/redis.conf ]] && \
-        cp /etc/redis/redis.conf "/etc/redis/redis.conf.bak.$(date +%Y%m%d%H%M%S)" || true
-
-    cp "${CONFIG_DIR}/redis.conf" /etc/redis/redis.conf
+if [[ -f /etc/redis/redis.conf ]]; then
     chown redis:redis /etc/redis/redis.conf 2>/dev/null || true
-    chmod 640 /etc/redis/redis.conf
-    log_info "Deployed: /etc/redis/redis.conf"
+    chmod 640 /etc/redis/redis.conf 2>/dev/null || true
+    log_info "Verified: /etc/redis/redis.conf"
 else
-    log_error "Config not found: ${CONFIG_DIR}/redis.conf"
+    log_error "/etc/redis/redis.conf not found."
+    log_error "Run v2_unpack_opencti_infra.sh first to deploy config files."
     exit 1
 fi
 
 #===============================================================================
-# 5. Deploy systemd override
+# 5. Deploy systemd override (inline)
 #===============================================================================
 log_step "Deploying systemd override..."
 
 OVERRIDE_DIR="/etc/systemd/system/redis.service.d"
 mkdir -p "${OVERRIDE_DIR}"
 
-if [[ -f "${SCRIPT_DIR}/redis-service-override.conf" ]]; then
-    cp "${SCRIPT_DIR}/redis-service-override.conf" "${OVERRIDE_DIR}/limit.conf"
-    log_info "Deployed: ${OVERRIDE_DIR}/limit.conf"
-else
-    log_warn "Override not found: ${SCRIPT_DIR}/redis-service-override.conf"
-fi
+cat > "${OVERRIDE_DIR}/limit.conf" << 'EOF'
+[Service]
+LimitNOFILE=65536
+TimeoutStartSec=90s
+TimeoutStopSec=30s
+Restart=on-failure
+RestartSec=5s
+OOMScoreAdjust=-900
+EOF
+log_info "Deployed: ${OVERRIDE_DIR}/limit.conf"
 
 systemctl daemon-reload
 
