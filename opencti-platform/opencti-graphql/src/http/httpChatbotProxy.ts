@@ -57,7 +57,7 @@ const getChatbotConfigError = () => {
 export const XTM_ONE_CHATBOT_URL = OPENAI_BASE_URL;
 
 const SYSTEM_PROMPT = `You are V2-AI, an expert AI assistant specialized in Cyber Threat Intelligence (CTI).
-You run inside an OpenCTI platform instance. Your purpose is to help analysts with:
+You run inside an V2TIP platform instance. Your purpose is to help analysts with:
 - Understanding threat actors, malware, campaigns, and attack patterns
 - Interpreting STIX objects and relationships
 - Writing and reviewing CTI reports
