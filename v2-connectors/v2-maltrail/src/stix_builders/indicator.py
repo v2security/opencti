@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from stix2 import Identity, Indicator, KillChainPhase
+from stix2 import ExternalReference, Identity, Indicator, KillChainPhase
 
 from config import STIX_NAMESPACE
 from trail.label_map import IOCGroupInfo
@@ -66,6 +66,15 @@ def create_indicator(
         )
     ]
 
+    # MITRE ATT&CK tactic external reference
+    external_references = [
+        ExternalReference(
+            source_name="mitre-attack",
+            external_id=info.tactic_id,
+            url=f"https://attack.mitre.org/tactics/{info.tactic_id}/",
+        )
+    ]
+
     if file_tag:
         description = (
             f"Maltrail threat intelligence: {value} classified as "
@@ -91,6 +100,7 @@ def create_indicator(
         "revoked": False,
         "indicator_types": ["malicious-activity"],
         "kill_chain_phases": kill_chain_phases,
+        "external_references": external_references,
         "labels": labels,
         "x_opencti_score": info.score,
         "x_opencti_detection": True,

@@ -302,6 +302,18 @@ services:
       - /opt/connector/data/maltrail:/opt/connector/data
     restart: always
 
+  connector-v2-loldrivers:
+    build:
+      context: ./v2-loldrivers
+      dockerfile: Dockerfile
+    image: v2-connector/loldrivers:latest
+    container_name: connector-v2-loldrivers
+    network_mode: host
+    environment:
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_V2_LOLDRIVERS_ID}
+    restart: always
+
   connector-v2-botnet:
     build:
       context: ./v2-botnet

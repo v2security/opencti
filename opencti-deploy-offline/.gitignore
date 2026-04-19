@@ -9,6 +9,8 @@ cert/
 # opencti-worker/v2_start_opencti_worker.sh # UN-IGNORED: no embedded secrets
 
 # Offline deploy archives
+opencti-app.tar.gz
+opencti-infra.tar.gz
 opencti-offline-deploy.tar.gz
 files/opencti-bundle.tar.gz
 files/opencti-source.tar.gz

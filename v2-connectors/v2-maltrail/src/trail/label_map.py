@@ -41,6 +41,7 @@ class IOCGroupInfo:
     group: str          # e.g. "dst.malware", "src.scanner"
     score: int          # x_opencti_score (0-100)
     kill_chain: str     # MITRE ATT&CK phase_name
+    tactic_id: str      # MITRE ATT&CK tactic ID, e.g. "TA0002"
 
 
 # ---------------------------------------------------------------------------
@@ -48,22 +49,22 @@ class IOCGroupInfo:
 # ---------------------------------------------------------------------------
 
 GROUP_META: dict[str, IOCGroupInfo] = {
-    "dst.malware":      IOCGroupInfo("dst-ioc", "dst.malware",      80, "execution"),
-    "dst.ransomware":   IOCGroupInfo("dst-ioc", "dst.ransomware",   95, "impact"),
-    "dst.rat":          IOCGroupInfo("dst-ioc", "dst.rat",          90, "command-and-control"),
-    "dst.stealer":      IOCGroupInfo("dst-ioc", "dst.stealer",      85, "credential-access"),
-    "dst.botnet":       IOCGroupInfo("dst-ioc", "dst.botnet",       85, "command-and-control"),
-    "dst.c2":           IOCGroupInfo("dst-ioc", "dst.c2",           90, "command-and-control"),
-    "dst.miner":        IOCGroupInfo("dst-ioc", "dst.miner",        60, "impact"),
-    "dst.exploit_kit":  IOCGroupInfo("dst-ioc", "dst.exploit_kit",  80, "initial-access"),
-    "dst.phishing":     IOCGroupInfo("dst-ioc", "dst.phishing",     75, "initial-access"),
-    "dst.anonymizer":   IOCGroupInfo("dst-ioc", "dst.anonymizer",   50, "defense-evasion"),
-    "dst.suspicious":   IOCGroupInfo("dst-ioc", "dst.suspicious",   40, "resource-development"),
-    "src.scanner":      IOCGroupInfo("src-ioc", "src.scanner",      60, "reconnaissance"),
-    "src.attacker":     IOCGroupInfo("src-ioc", "src.attacker",     90, "initial-access"),
-    "src.bot":          IOCGroupInfo("src-ioc", "src.bot",          55, "reconnaissance"),
-    "src.ddos":         IOCGroupInfo("src-ioc", "src.ddos",         85, "impact"),
-    "src.anonymizer":   IOCGroupInfo("src-ioc", "src.anonymizer",   50, "defense-evasion"),
+    "dst.malware":      IOCGroupInfo("dst-ioc", "dst.malware",      80, "execution",             "TA0002"),
+    "dst.ransomware":   IOCGroupInfo("dst-ioc", "dst.ransomware",   95, "impact",                "TA0040"),
+    "dst.rat":          IOCGroupInfo("dst-ioc", "dst.rat",          90, "command-and-control",   "TA0011"),
+    "dst.stealer":      IOCGroupInfo("dst-ioc", "dst.stealer",      85, "credential-access",     "TA0006"),
+    "dst.botnet":       IOCGroupInfo("dst-ioc", "dst.botnet",       85, "command-and-control",   "TA0011"),
+    "dst.c2":           IOCGroupInfo("dst-ioc", "dst.c2",           90, "command-and-control",   "TA0011"),
+    "dst.miner":        IOCGroupInfo("dst-ioc", "dst.miner",        60, "impact",                "TA0040"),
+    "dst.exploit_kit":  IOCGroupInfo("dst-ioc", "dst.exploit_kit",  80, "initial-access",        "TA0001"),
+    "dst.phishing":     IOCGroupInfo("dst-ioc", "dst.phishing",     75, "initial-access",        "TA0001"),
+    "dst.anonymizer":   IOCGroupInfo("dst-ioc", "dst.anonymizer",   50, "defense-evasion",       "TA0005"),
+    "dst.suspicious":   IOCGroupInfo("dst-ioc", "dst.suspicious",   40, "resource-development",  "TA0042"),
+    "src.scanner":      IOCGroupInfo("src-ioc", "src.scanner",      60, "reconnaissance",        "TA0043"),
+    "src.attacker":     IOCGroupInfo("src-ioc", "src.attacker",     90, "initial-access",        "TA0001"),
+    "src.bot":          IOCGroupInfo("src-ioc", "src.bot",          55, "reconnaissance",        "TA0043"),
+    "src.ddos":         IOCGroupInfo("src-ioc", "src.ddos",         85, "impact",                "TA0040"),
+    "src.anonymizer":   IOCGroupInfo("src-ioc", "src.anonymizer",   50, "defense-evasion",       "TA0005"),
 }
 
 # ---------------------------------------------------------------------------
