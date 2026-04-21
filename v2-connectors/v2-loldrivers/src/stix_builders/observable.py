@@ -9,7 +9,12 @@ from stix2 import CustomObservable, File
 
 from config import STIX_NAMESPACE
 from parsers.driver import DriverEntry, DriverSample
-from stix_builders.indicator import get_author
+from stix_builders.indicator import (
+    IOCGroupInfo,
+    _MALICIOUS_INFO,
+    _VULNERABLE_INFO,
+    get_author,
+)
 
 
 def create_observable(
@@ -37,14 +42,16 @@ def create_observable(
 
     name = sample.filename or (driver.tags[0] if driver.tags else "Unknown")
 
+    info: IOCGroupInfo = _MALICIOUS_INFO if "malicious" in driver.category else _VULNERABLE_INFO
+
     kwargs: dict[str, Any] = {
         "id": file_id,
         "hashes": hashes,
         "name": name,
         "allow_custom": True,
         "x_opencti_description": f"LOLDrivers - {driver.category}: {name}",
-        "labels": ["v2secure", "v2-loldrivers", driver.category],
-        "x_opencti_score": 80 if "malicious" in driver.category else 50,
+        "labels": ["v2secure", "v2-driver", "v2-ioc", info.layer, info.group, info.tactic_id],
+        "x_opencti_score": info.score,
         "x_opencti_created_by_ref": get_author().id,
     }
 

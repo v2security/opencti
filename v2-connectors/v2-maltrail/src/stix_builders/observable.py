@@ -25,7 +25,7 @@ def create_observable(
         ioc_type: 'ipv4' or 'domain'.
         file_tag: Semantic tag from the source filename (e.g. 'emotet', 'bad_wpad').
     """
-    obs_labels = ["v2secure", "v2-ioc", info.layer, info.group]
+    obs_labels = ["v2secure", "v2-malt", "v2-ioc", info.layer, info.group, info.tactic_id]
 
     if file_tag:
         desc = f"Maltrail {info.group} ({file_tag}): {value}"

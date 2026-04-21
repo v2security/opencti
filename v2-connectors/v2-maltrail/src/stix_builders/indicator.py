@@ -12,8 +12,8 @@ from config import STIX_NAMESPACE
 from trail.label_map import IOCGroupInfo
 
 _AUTHOR = Identity(
-    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "v2secure")),
-    name="v2secure",
+    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "V2 Secure")),
+    name="V2 Secure",
     identity_class="organization",
 )
 
@@ -55,8 +55,8 @@ def create_indicator(
         pattern = f"[domain-name:value = '{value}']"
         main_observable_type = "Domain-Name"
 
-    # 4 labels: org, source, layer, group
-    labels = ["v2secure", "v2-ioc", info.layer, info.group]
+    # 6 labels: org, connector, ioc-marker, layer, group, tactic-id
+    labels = ["v2secure", "v2-malt", "v2-ioc", info.layer, info.group, info.tactic_id]
 
     # Per-group kill chain phase
     kill_chain_phases = [

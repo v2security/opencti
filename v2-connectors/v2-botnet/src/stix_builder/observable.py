@@ -7,7 +7,7 @@ import uuid
 
 from stix2 import IPv4Address
 
-from stix_builder.indicator import STIX_NAMESPACE, get_author
+from stix_builder.indicator import STIX_NAMESPACE, _IOC_INFO, get_author
 
 
 def create_observable(parsed: dict) -> IPv4Address | None:
@@ -32,8 +32,8 @@ def create_observable(parsed: dict) -> IPv4Address | None:
         "value": source_ip,
         "created_by_ref": get_author().id,
         "allow_custom": True,
-        "labels": ["v2secure", "v2-botnet", "src-ioc", "src.bot"],
-        "x_opencti_score": 100,
+        "labels": ["v2secure", "v2-botnet", "v2-ioc", _IOC_INFO.layer, _IOC_INFO.group, _IOC_INFO.tactic_id],
+        "x_opencti_score": _IOC_INFO.score,
         "x_opencti_description": json.dumps(source_json, ensure_ascii=False),
     }
 

@@ -6,7 +6,7 @@ import uuid
 
 from stix2 import IPv4Address, Indicator, Relationship
 
-from stix_builder.indicator import STIX_NAMESPACE, get_author
+from stix_builder.indicator import _IOC_INFO, STIX_NAMESPACE, get_author
 
 
 def create_based_on(indicator: Indicator, observable: IPv4Address) -> Relationship:
@@ -21,6 +21,6 @@ def create_based_on(indicator: Indicator, observable: IPv4Address) -> Relationsh
         target_ref=observable.id,
         created_by_ref=get_author().id,
         confidence=100,
-        labels=["v2secure", "v2-botnet", "src-ioc", "src.bot"],
+        labels=["v2secure", "v2-botnet", "v2-ioc", _IOC_INFO.layer, _IOC_INFO.group, _IOC_INFO.tactic_id],
         allow_custom=True,
     )

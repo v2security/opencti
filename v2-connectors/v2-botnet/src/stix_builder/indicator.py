@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -21,18 +22,39 @@ except ImportError:
 STIX_NAMESPACE = uuid.UUID("b1a2c3d4-e5f6-7890-abcd-ef1234567890")
 
 _AUTHOR = Identity(
-    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "v2secure")),
-    name="v2secure",
+    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "V2 Secure")),
+    name="V2 Secure",
     identity_class="organization",
 )
 
 # Botnet IPs are short-lived — expire after 30 days
 _VALID_UNTIL_DAYS = 30
 
+
+@dataclass(frozen=True)
+class IOCGroupInfo:
+    """IOC classification — mirrors label_map.IOCGroupInfo."""
+    layer: str       # "src-ioc" or "dst-ioc"
+    group: str       # e.g. "src.bot"
+    score: int       # x_opencti_score
+    kill_chain: str  # MITRE ATT&CK phase_name
+    tactic_id: str   # MITRE ATT&CK tactic ID
+
+
+# Botnet connector always produces src.bot IOCs:
+# infected hosts beaconing out → observed as inbound scan/bot traffic
+_IOC_INFO = IOCGroupInfo(
+    layer="src-ioc",
+    group="src.bot",
+    score=55,
+    kill_chain="reconnaissance",
+    tactic_id="TA0043",
+)
+
 _KILL_CHAIN_PHASES = [
     KillChainPhase(
         kill_chain_name="mitre-attack",
-        phase_name="command-and-control",
+        phase_name=_IOC_INFO.kill_chain,
     )
 ]
 
@@ -111,12 +133,8 @@ def create_indicator(parsed: dict) -> Indicator | None:
     _dedup_key = event_id or (f"{source_ip}:{timestamp}" if timestamp else f"{source_ip}:{malware_family}" if malware_family else source_ip)
     indicator_id = "indicator--" + str(uuid.uuid5(STIX_NAMESPACE, _dedup_key))
 
-    labels = ["v2secure", "v2-botnet", "src-ioc", "src.bot"]
-    if malware_family:
-        labels.append(f"malware-family:{malware_family}")
-    malware_variant = parsed.get("malware_variant", "")
-    if malware_variant:
-        labels.append(f"malware-variant:{malware_variant}")
+    # 6 labels derived from _IOC_INFO: org, connector, ioc-marker, layer, group, tactic-id
+    labels = ["v2secure", "v2-botnet", "v2-ioc", _IOC_INFO.layer, _IOC_INFO.group, _IOC_INFO.tactic_id]
 
     ext_refs = []
     if event_id:
@@ -146,7 +164,7 @@ def create_indicator(parsed: dict) -> Indicator | None:
         "kill_chain_phases": _KILL_CHAIN_PHASES,
         "labels": labels,
         "external_references": ext_refs,
-        "x_opencti_score": 100,
+        "x_opencti_score": _IOC_INFO.score,
         "x_opencti_detection": True,
         "x_opencti_main_observable_type": "IPv4-Addr",
         "allow_custom": True,

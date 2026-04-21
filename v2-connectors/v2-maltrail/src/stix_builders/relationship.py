@@ -23,6 +23,6 @@ def create_based_on(indicator, observable, info: IOCGroupInfo) -> Relationship:
         target_ref=observable.id,
         created_by_ref=get_author().id,
         confidence=100,
-        labels=["v2secure", "v2-ioc", info.layer, info.group],
+        labels=["v2secure", "v2-malt", "v2-ioc", info.layer, info.group, info.tactic_id],
         allow_custom=True,
     )

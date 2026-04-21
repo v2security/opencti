@@ -53,7 +53,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from clients.loldrivers import LolDriversApiClient
 from config import ConnectorConfig
 from parsers.driver import DriverEntry, parse_all_drivers
-from stix_builders.indicator import create_indicator, get_author
+from stix_builders.indicator import _MALICIOUS_INFO, _VULNERABLE_INFO, create_indicator, get_author
 from stix_builders.malware import create_malware
 from stix_builders.observable import create_observable
 from stix_builders.relationship import create_based_on, create_indicates
@@ -208,6 +208,9 @@ class LolDriversConnector:
                 entities.append(malware)
 
                 for sample in driver.samples:
+                    # Derive IOCGroupInfo once per driver (same for all samples)
+                    ioc_info = _MALICIOUS_INFO if "malicious" in driver.category else _VULNERABLE_INFO
+
                     # Create Indicator (hash-based detection pattern)
                     if self.cfg.loldrivers_create_indicators:
                         indicator = create_indicator(driver, sample)
@@ -215,7 +218,7 @@ class LolDriversConnector:
                             entities.append(indicator)
 
                             # Indicator 'indicates' Malware
-                            rel_indicates = create_indicates(indicator.id, malware.id)
+                            rel_indicates = create_indicates(indicator.id, malware.id, ioc_info)
                             relationships.append(rel_indicates)
 
                     # Create Observable (StixFile)
@@ -226,7 +229,7 @@ class LolDriversConnector:
 
                             # Indicator 'based-on' Observable
                             if self.cfg.loldrivers_create_indicators and indicator:
-                                rel_based_on = create_based_on(indicator.id, observable.id)
+                                rel_based_on = create_based_on(indicator.id, observable.id, ioc_info)
                                 relationships.append(rel_based_on)
 
                     sample_count += 1

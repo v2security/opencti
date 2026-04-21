@@ -6,23 +6,34 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from stix2 import ExternalReference, Identity, Indicator
+from stix2 import ExternalReference, Identity, Indicator, KillChainPhase
 
 from config import LOLDRIVERS_URL, STIX_NAMESPACE
 from parsers.driver import DriverEntry, DriverSample
 
-# Author Identity for LOLDrivers
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class IOCGroupInfo:
+    """IOC classification — mirrors label_map.IOCGroupInfo."""
+    layer: str       # "dst-ioc" or "src-ioc"
+    group: str       # e.g. "dst.malware"
+    score: int       # x_opencti_score
+    kill_chain: str  # MITRE ATT&CK phase_name
+    tactic_id: str   # MITRE ATT&CK tactic ID
+
+# Author Identity
 _AUTHOR = Identity(
-    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "LOLDrivers Project")),
-    name="LOLDrivers Project",
-    description="Living Off The Land Drivers — a curated list of Windows drivers used by adversaries.",
+    id="identity--" + str(uuid.uuid5(STIX_NAMESPACE, "V2 Secure")),
+    name="V2 Secure",
     identity_class="organization",
-    contact_information="https://www.loldrivers.io/",
 )
 
 
 def get_author() -> Identity:
-    """Return the LOLDrivers author Identity."""
+    """Return the V2 Secure author Identity."""
     return _AUTHOR
 
 
@@ -49,6 +60,25 @@ def _category_to_label(category: str) -> str:
     if "malicious" in category:
         return "malicious-activity"
     return "anomalous-activity"
+
+
+# IOCGroupInfo instances — one per driver category
+# malicious drivers: actively used by attackers → dst.malware / TA0002 Execution
+_MALICIOUS_INFO = IOCGroupInfo(
+    layer="dst-ioc",
+    group="dst.malware",
+    score=80,
+    kill_chain="execution",
+    tactic_id="TA0002",
+)
+# vulnerable drivers: not yet weaponized but abusable → dst.suspicious / TA0042 Resource Development
+_VULNERABLE_INFO = IOCGroupInfo(
+    layer="dst-ioc",
+    group="dst.suspicious",
+    score=40,
+    kill_chain="resource-development",
+    tactic_id="TA0042",
+)
 
 
 def create_indicator(
@@ -98,15 +128,13 @@ def create_indicator(
                 ExternalReference(source_name="LOLDrivers Reference", url=res_url)
             )
 
-    # Labels
-    labels = ["v2secure", "v2-loldrivers", driver.category]
-    if "malicious" in driver.category:
-        labels.append("malicious-activity")
-    else:
-        labels.append("anomalous-activity")
+    # IOCGroupInfo lookup by driver category
+    info: IOCGroupInfo = _MALICIOUS_INFO if "malicious" in driver.category else _VULNERABLE_INFO
+    labels = ["v2secure", "v2-driver", "v2-ioc", info.layer, info.group, info.tactic_id]
 
-    # Score: malicious = 80, vulnerable = 50
-    score = 80 if "malicious" in driver.category else 50
+    kill_chain_phases = [
+        KillChainPhase(kill_chain_name="mitre-attack", phase_name=info.kill_chain)
+    ]
 
     # Created timestamp
     try:
@@ -126,9 +154,10 @@ def create_indicator(
         "created_by_ref": _AUTHOR.id,
         "confidence": 90 if driver.verified else 60,
         "labels": labels,
+        "kill_chain_phases": kill_chain_phases,
         "external_references": ext_refs,
         "allow_custom": True,
-        "x_opencti_score": score,
+        "x_opencti_score": info.score,
         "x_opencti_main_observable_type": "StixFile",
     }
 
