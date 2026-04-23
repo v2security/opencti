@@ -1,0 +1,18 @@
+# V2Secure Honeypot Connector — non-sensitive settings only.
+# Secrets (OPENCTI_TOKEN, CONNECTOR_ID) come from .env or env vars.
+
+opencti:
+  url: "http://localhost:8080"
+
+connector:
+  type: "EXTERNAL_IMPORT"
+  name: "V2Secure Honeypot"
+  scope: "indicator"
+  log_level: "info"
+  duration_period: "PT30M"             # ISO 8601 — every 30 minutes
+  relationship_delay: 300               # Seconds to wait before sending relationships
+
+honeypot:
+  file_path: "/opt/connector/data/IP_Reputation.csv"   # CSV log produced by the honeypot
+  bundle_size: 500                                      # IOCs per STIX bundle
+  valid_days: 90                                        # Indicator validity period (days)
