@@ -86,7 +86,21 @@ rm -rf opencti-worker/
 log "  ✓ opencti-worker/ cleaned up"
 
 # ══════════════════════════════════════════════════════════════
-# 3. App uninstall script → /usr/local/bin/
+# 3. Worker systemd service unit
+# ══════════════════════════════════════════════════════════════
+log ""
+log "── opencti-worker@.service → /etc/systemd/system/"
+if [[ -f systemd/opencti-worker@.service ]]; then
+    cp -f systemd/opencti-worker@.service /etc/systemd/system/opencti-worker@.service
+    systemctl daemon-reload
+    rm -rf systemd/
+    log "  ✓ opencti-worker@.service installed + daemon-reload"
+else
+    warn "  ! systemd/opencti-worker@.service not found — skipping"
+fi
+
+# ══════════════════════════════════════════════════════════════
+# 4. App uninstall script → /usr/local/bin/
 # ══════════════════════════════════════════════════════════════
 if [[ -f v2_uninstall_opencti_app.sh ]]; then
     log ""

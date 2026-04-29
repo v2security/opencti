@@ -65,6 +65,10 @@ check_file "opencti-worker/v2_stop_opencti_worker.sh"
 check_file "opencti-worker/v2_uninstall_opencti_worker.sh"
 
 log ""
+log "── Systemd ──"
+check_file "systemd/opencti-worker@.service"
+
+log ""
 log "── Deploy scripts ──"
 check_file "v2_unpack_opencti_app.sh"
 check_file "v2_uninstall_opencti_app.sh"
@@ -89,6 +93,7 @@ tar czf "$ARCHIVE_NAME" \
     -C "$SCRIPT_DIR" \
     opencti/ \
     opencti-worker/ \
+    systemd/opencti-worker@.service \
     v2_unpack_opencti_app.sh \
     v2_uninstall_opencti_app.sh
 
