@@ -151,9 +151,8 @@ log "── Systemd services"
 cp -f systemd/minio.service             /etc/systemd/system/minio.service
 cp -f systemd/rabbitmq.service          /etc/systemd/system/rabbitmq.service
 cp -f systemd/opencti-platform.service  /etc/systemd/system/opencti-platform.service
-cp -f systemd/opencti-worker@.service   /etc/systemd/system/opencti-worker@.service
 systemctl daemon-reload
-log "  ✓ 4 services installed + daemon-reload"
+log "  ✓ 3 services installed + daemon-reload"
 rm -rf systemd/
 log "  ✓ systemd/ cleaned up"
 

@@ -180,6 +180,7 @@ Start scripts tự đọc file này và map sang format riêng của từng comp
 
 ```bash
 vi /etc/saids/opencti/.env
+nano /etc/saids/opencti/.env
 ```
 
 **Các biến cần sửa:**
@@ -264,8 +265,12 @@ v2_setup_opencti_worker.sh
 
 # Start lại
 systemctl start opencti-platform
+systemctl status opencti-platform
+
 # Đợi ~60s...
+
 systemctl start opencti-worker@1 opencti-worker@2 opencti-worker@3
+systemctl status opencti-worker@1 opencti-worker@2 opencti-worker@3
 ```
 
 ---

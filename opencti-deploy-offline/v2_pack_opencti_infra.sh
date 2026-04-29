@@ -60,7 +60,7 @@ check_file "config/.env"
 for f in config/.env.sample \
          config/redis.conf config/minio.conf config/rabbitmq.conf config/rabbitmq-env.conf \
          config/enabled_plugins config/elasticsearch.yml config/logrotate.conf config/check_indicator.py \
-         systemd/minio.service systemd/rabbitmq.service systemd/opencti-platform.service systemd/opencti-worker@.service; do
+         systemd/minio.service systemd/rabbitmq.service systemd/opencti-platform.service; do
     check_file "$f"
 done
 
@@ -90,6 +90,7 @@ tar czf "$ARCHIVE_NAME" \
     rabbitmq/ \
     redis/ \
     config/ \
+    --exclude='systemd/opencti-worker@.service' \
     systemd/ \
     v2_unpack_opencti_infra.sh \
     v2_uninstall_opencti_infra.sh
