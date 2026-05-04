@@ -50,11 +50,12 @@ elasticsearch:
 telegram:
   bot_token: "<BOT_TOKEN>"
   chat_id: "<CHAT_ID>"
-  format: table  # "table" hoặc "text"
+  format: table  # "table", "text", hoặc "both"
 ```
 
 - **table** (mặc định) — Bảng monospace, đẹp trên PC/tablet
 - **text** — Danh sách text thường, dễ đọc trên điện thoại màn hình nhỏ
+- **both** — Gửi cả 2 message liên tiếp
 
 Có thể override bằng biến môi trường (ưu tiên cao hơn file):
 
@@ -151,11 +152,11 @@ Tổng: 16 runs  |  191,779 items  |  2 errors
   ❌ MISP OSINT Feed
      2 runs · 163,392 items · 2 errors
 
-📦 Hoạt động:
+📦 Đã xử lý:
   ✅ NVD CVE (V2Secure)
      6 runs · 27,664 items
 
-💤 Không chạy:
+💤 Idle (không có runs):
   Shodan, SOCRadar, ImportDocument, ...
 ```
 
@@ -166,19 +167,16 @@ Tổng: 16 runs  |  191,779 items  |  2 errors
 ## Deploy (systemd)
 
 ```bash
-# Copy binary
-sudo cp deploy/connector-status deploy/connector-stats /opt/tools/
+# Tạo thư mục
+sudo mkdir -p /opt/connector/monitor
+
+# Copy binary và config
+cd v2-connectors/monitor
+sudo cp deploy/connector-status deploy/connector-stats /opt/connector/monitor/
+sudo cp config.yml /opt/connector/monitor/config.yml
 
 # Copy systemd units
 sudo cp deploy/*.service deploy/*.timer /etc/systemd/system/
-
-# Tạo file env (nếu dùng env override)
-sudo mkdir -p /etc/saids/opencti
-sudo tee /etc/saids/opencti/.env <<'EOF'
-ES_URL=http://localhost:8686
-TELEGRAM_BOT_TOKEN=<token>
-TELEGRAM_CHAT_ID=<chat_id>
-EOF
 
 # Enable timers
 sudo systemctl daemon-reload

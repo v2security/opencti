@@ -5,9 +5,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-WorkingDirectory=/opt/tools
-ExecStart=/opt/tools/connector-status
-EnvironmentFile=/etc/saids/opencti/.env
+WorkingDirectory=/opt/connector/monitor
+ExecStart=/opt/connector/monitor/connector-status
 
 StandardOutput=journal
 StandardError=journal

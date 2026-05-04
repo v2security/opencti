@@ -32,7 +32,7 @@ Có 2 luồng nhận file, đều dùng two-phase push:
 # Upload file
 curl -X POST http://localhost:20000/api/v1/files \
   -H "X-Api-Key: ChangeMe" \
-  -F "file=@botnet.json"
+  -F "file=@/ws/opencti/.data/sample/botnet.json"
 
 # Qua Nginx (HTTPS) — self-signed cert, dùng -k để skip verify
 curl -k -X POST https://localhost:21000/api/v1/files \

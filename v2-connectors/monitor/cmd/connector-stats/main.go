@@ -79,22 +79,28 @@ func main() {
 
 	slog.Info("data fetched", "connectors", len(connectors), "work_buckets", len(workMap))
 
-	var message string
-	if cfg.Telegram.Format == "text" {
-		message = formatSummaryText(from, to, connectors, workMap)
+	var messages []string
+	if cfg.Telegram.Format == "both" {
+		messages = []string{formatSummaryTable(from, to, connectors, workMap), formatSummaryText(from, to, connectors, workMap)}
+	} else if cfg.Telegram.Format == "text" {
+		messages = []string{formatSummaryText(from, to, connectors, workMap)}
 	} else {
-		message = formatSummaryTable(from, to, connectors, workMap)
+		messages = []string{formatSummaryTable(from, to, connectors, workMap)}
 	}
 
 	if *stdoutOnly {
-		fmt.Println(message)
+		for _, m := range messages {
+			fmt.Println(m)
+		}
 		return
 	}
 
 	tg := telegram.NewSender(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
-	if err := tg.Send(message); err != nil {
-		slog.Error("send telegram", "err", err)
-		os.Exit(1)
+	for _, m := range messages {
+		if err := tg.Send(m); err != nil {
+			slog.Error("send telegram", "err", err)
+			os.Exit(1)
+		}
 	}
 	slog.Info("summary report sent", "connectors", len(connectors))
 }
@@ -106,8 +112,11 @@ func summaryHeader(sb *strings.Builder, from, to time.Time, totalRuns, totalItem
 		telegram.Esc(to.In(vnTZ).Format("02/01")),
 	)
 
+	now := time.Now().In(vnTZ)
+	nextRunDay := time.Date(now.Year(), now.Month(), now.Day()+1, 8, 0, 0, 0, vnTZ)
 	fmt.Fprintf(sb, "📊 *Event Summary*\n")
-	fmt.Fprintf(sb, "_%s  \\(%s\\)_\n\n", dateStr, rangeStr)
+	fmt.Fprintf(sb, "_%s  \\(%s\\)_\n", dateStr, rangeStr)
+	fmt.Fprintf(sb, "_Next run: %s 08:00_\n\n", telegram.Esc(nextRunDay.Format("02/01")))
 	fmt.Fprintf(sb, "• *Runs* — Số lần connector chạy \\(work cycle\\)\n")
 	fmt.Fprintf(sb, "• *Items* — Số đối tượng STIX đã xử lý\n")
 	fmt.Fprintf(sb, "• *Errors* — Số lỗi phát sinh khi import\n\n")
@@ -176,7 +185,7 @@ func formatSummaryText(from, to time.Time, connectors []connstatus.Connector, wo
 	summaryHeader(&sb, from, to, totalRuns, totalItems, totalErrors)
 
 	// Active connectors (has runs)
-	sb.WriteString("\n📦 *Hoạt động:*\n")
+	sb.WriteString("\n📦 *Đã xử lý:*\n")
 	hasActivity := false
 	for _, c := range connectors {
 		s := workMap[c.ID]
@@ -198,7 +207,7 @@ func formatSummaryText(from, to time.Time, connectors []connstatus.Connector, wo
 	}
 
 	// Idle connectors (no runs at all)
-	sb.WriteString("\n💤 *Không chạy:*\n")
+	sb.WriteString("\n💤 *Idle \\(không có runs\\):*\n")
 	idleNames := []string{}
 	for _, c := range connectors {
 		if workMap[c.ID].WorksCount == 0 {
