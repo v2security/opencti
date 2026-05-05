@@ -7,4 +7,4 @@ telegram:
   # chat_id: "-1003831445471"
   bot_token: "5135556010:AAF-KCuJw7gSCOg0pOQIHkfg1DIsD2pql3U"
   chat_id: "-1002999135889"
-  format: both  # "table" (PC), "text" (điện thoại), "both" (gửi cả 2)
+  format: text  # "table" (PC), "text" (điện thoại), "both" (gửi cả 2)

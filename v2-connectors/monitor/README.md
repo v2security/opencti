@@ -124,7 +124,7 @@ Total: 17  |  Active: 16  |  Inactive: 1
 
 **Dạng table** (format: table):
 ```
-📊 Event Summary
+📊 Connector Stats
 02/04/2026  (02/04 00:00 → 02/04 23:59)
 
 • Runs — Số lần connector chạy (work cycle)
@@ -143,7 +143,7 @@ Tổng: 16 runs  |  191,779 items  |  2 errors
 
 **Dạng text** (format: text) — dễ đọc trên điện thoại:
 ```
-📊 Event Summary
+📊 Connector Stats
 02/04/2026  (02/04 00:00 → 02/04 23:59)
 
 Tổng: 16 runs  |  191,779 items  |  2 errors

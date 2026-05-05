@@ -16,7 +16,7 @@ from typing import Optional
 import uvicorn
 import yaml
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, Header, HTTPException, Request
 from pycti import OpenCTIConnectorHelper, get_config_variable
 from watchfiles import watch
 
@@ -195,22 +195,6 @@ class ServerConfig:
 
 CONFIG = ServerConfig.from_config()
 
-_safe_name = re.compile(r"[^a-zA-Z0-9._-]+")
-
-
-def _sanitize_filename(filename: str) -> str:
-    cleaned = filename.strip().replace("\\", "/").split("/")[-1]
-    cleaned = _safe_name.sub("_", cleaned)
-    return cleaned[:255]
-
-
-def _extension_allowed(filename: str) -> bool:
-    if not CONFIG.allowed_extensions:
-        return True
-    ext = filename.rsplit(".", 1)
-    if len(ext) < 2:
-        return False
-    return ext[1].lower() in CONFIG.allowed_extensions
 
 
 def _now_iso() -> str:
@@ -249,47 +233,28 @@ async def get_config():
     tags=["upload"],
 )
 async def upload_file(
-    file: UploadFile = File(...),
+    request: Request,
     x_api_key: str | None = Header(default=None, alias="X-Api-Key"),
 ):
     _enforce_upload_access(x_api_key)
 
-    safe_filename = _sanitize_filename(file.filename or "")
-    if not safe_filename:
-        raise HTTPException(status_code=400, detail="missing_or_invalid_filename")
-
-    if not _extension_allowed(safe_filename):
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "extension_not_allowed",
-                "allowed_extensions": sorted(CONFIG.allowed_extensions),
-            },
-        )
-
-    _CHUNK = 64 * 1024  # 64 KB
-    chunks: list[bytes] = []
-    total = 0
-    hasher = hashlib.sha256()
-    while True:
-        chunk = await file.read(_CHUNK)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > CONFIG.max_file_size:
-            raise HTTPException(
-                status_code=413,
-                detail={"error": "file_too_large", "max_bytes": CONFIG.max_file_size},
-            )
-        chunks.append(chunk)
-        hasher.update(chunk)
-
-    if total == 0:
+    content = await request.body()
+    if not content:
         raise HTTPException(status_code=400, detail="empty_body")
+    if len(content) > CONFIG.max_file_size:
+        raise HTTPException(
+            status_code=413,
+            detail={"error": "file_too_large", "max_bytes": CONFIG.max_file_size},
+        )
+    try:
+        json.loads(content)
+    except (json.JSONDecodeError, ValueError):
+        raise HTTPException(status_code=400, detail="invalid_json")
 
-    content = b"".join(chunks)
+    hasher = hashlib.sha256(content)
     file_id = str(uuid.uuid4())
-    target_path = CONFIG.storage_dir / f"{file_id}_{safe_filename}"
+    filename = f"{file_id}.json"
+    target_path = CONFIG.storage_dir / filename
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_bytes(content)
@@ -302,11 +267,11 @@ async def upload_file(
             status_code=503,
             detail={"error": "processing_queue_full", "queue_max_size": _file_queue.maxsize},
         )
-    logger.info("Queued for processing: %s (queue size: %d)", target_path.name, _file_queue.qsize())
+    logger.info("Queued for processing: %s (queue size: %d)", filename, _file_queue.qsize())
 
     return {
         "id": file_id,
-        "filename": safe_filename,
+        "filename": filename,
         "bytes": len(content),
         "sha256": hasher.hexdigest(),
         "queued_at": _now_iso(),
@@ -321,7 +286,7 @@ def _folder_watcher() -> None:
     for changes in watch(watch_dir):
         for change_type, path_str in changes:
             path = Path(path_str)
-            if change_type.name == "added" and _extension_allowed(path.name) and path.is_file():
+            if change_type.name == "added" and path.suffix == ".json" and path.is_file():
                 logger.info("Folder watcher: detected new file %s", path.name)
                 _file_queue.put(path)
 

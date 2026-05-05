@@ -1,6 +1,6 @@
 # v2-botnet — Botnet IOC Connector
 
-Custom connector nhận file JSON botnet qua **HTTP API (FastAPI)**, parse thành STIX Indicator rồi push vào OpenCTI.
+Custom connector nhận **JSON data trực tiếp qua HTTP API (FastAPI)**, tự ghi ra file rồi parse thành STIX Indicator và push vào OpenCTI.
 
 ## Cách chạy (Two-Phase Push)
 
@@ -29,21 +29,24 @@ Có 2 luồng nhận file, đều dùng two-phase push:
 ## API
 
 ```bash
-# Upload file
+# Gửi JSON trực tiếp
 curl -X POST http://localhost:20000/api/v1/files \
   -H "X-Api-Key: ChangeMe" \
-  -F "file=@/ws/opencti/.data/sample/botnet.json"
+  -H "Content-Type: application/json" \
+  -d @/ws/opencti/.data/sample/botnet.json
 
 # Qua Nginx (HTTPS) — self-signed cert, dùng -k để skip verify
 curl -k -X POST https://localhost:21000/api/v1/files \
   -H "X-Api-Key: ChangeMe" \
-  -F "file=@/workspace/tunv_opencti/.data/sample/botnet.json"
+  -H "Content-Type: application/json" \
+  -d @/ws/opencti/.data/sample/botnet.json
 
 # Hoặc verify đúng cert
 curl --cacert /path/to/nginx/certs/cert.pem \
   -X POST https://localhost:21000/api/v1/files \
   -H "X-Api-Key: ChangeMe" \
-  -F "file=@botnet.json"
+  -H "Content-Type: application/json" \
+  -d @botnet.json
 ```
 
 | Method | Path | Mô tả |
@@ -51,7 +54,7 @@ curl --cacert /path/to/nginx/certs/cert.pem \
 | `GET` | `/healthz` | Health check |
 | `GET` | `/docs` | Swagger UI |
 | `GET` | `/api/v1/config` | Xem config |
-| `POST` | `/api/v1/files` | Upload JSON file |
+| `POST` | `/api/v1/files` | Gửi JSON data (body) |
 
 ## STIX Output
 

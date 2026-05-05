@@ -114,7 +114,7 @@ func summaryHeader(sb *strings.Builder, from, to time.Time, totalRuns, totalItem
 
 	now := time.Now().In(vnTZ)
 	nextRunDay := time.Date(now.Year(), now.Month(), now.Day()+1, 8, 0, 0, 0, vnTZ)
-	fmt.Fprintf(sb, "📊 *Event Summary*\n")
+	fmt.Fprintf(sb, "📊 *Connector Stats*\n")
 	fmt.Fprintf(sb, "_%s  \\(%s\\)_\n", dateStr, rangeStr)
 	fmt.Fprintf(sb, "_Next run: %s 08:00_\n\n", telegram.Esc(nextRunDay.Format("02/01")))
 	fmt.Fprintf(sb, "• *Runs* — Số lần connector chạy \\(work cycle\\)\n")
@@ -191,13 +191,11 @@ func formatSummaryText(from, to time.Time, connectors []connstatus.Connector, wo
 		s := workMap[c.ID]
 		if s.WorksCount > 0 {
 			hasActivity = true
-			detail := fmt.Sprintf("%s runs · %s items",
+			detail := fmt.Sprintf("%s runs · %s items · %s errors",
 				formatNumber(s.WorksCount),
 				formatNumber(s.ItemsDone),
+				formatNumber(s.ErrorCount),
 			)
-			if s.ErrorCount > 0 {
-				detail += fmt.Sprintf(" · %s errors", formatNumber(s.ErrorCount))
-			}
 			fmt.Fprintf(&sb, "  ✅ %s\n", telegram.Esc(c.Name))
 			fmt.Fprintf(&sb, "     %s\n", telegram.Esc(detail))
 		}
